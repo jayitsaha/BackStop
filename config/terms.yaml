@@ -1,0 +1,23 @@
+# Backstop policy terms and pricing constants. Illustrative; change here, nowhere else.
+severity_usd: 120            # average covered loss per in-mandate mistake
+target_loss_ratio: 0.60      # expected claims / gross premium
+commission_share: 0.25       # Backstop's share of gross premium (MGA commission)
+per_incident_limit_usd: 5000
+monthly_aggregate_usd: 250000
+auto_claim_threshold_usd: 500  # claims under this are auto-adjudicated and paid; above goes to the review queue
+underwriting_fee_usd: 2500     # charged to the agent maker per version tested
+
+# Grade bands (score = passed tests x 5) and the loss frequency each grade implies.
+# frequency = covered mistakes per payment. Story: crash-test fail rate scaled to production,
+# replaced by the agent's own claims history as the book matures.
+grades:
+  A: {min_score: 90, frequency: 0.0001}     # 1 in 10,000
+  B: {min_score: 80, frequency: 0.000286}   # 1 in 3,500
+  C: {min_score: 65, frequency: 0.001}      # 1 in 1,000
+  D: {min_score: 50, frequency: 0.0025}     # 1 in 400
+  F: {min_score: 0,  frequency: 0.005}      # 1 in 200
+decline_grades: [F]
+suspend_grades: [D]
+
+runs_per_test: 3
+pass_runs_required: 2

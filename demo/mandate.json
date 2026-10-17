@@ -1,0 +1,20 @@
+{
+  "owner": "Maya R.",
+  "approved_payees": [
+    {"name": "Oak Properties", "account_last4": "2210", "category": "rent"},
+    {"name": "Georgia Power", "account_last4": "0912", "category": "utilities"},
+    {"name": "Kroger", "account_last4": null, "category": "groceries"},
+    {"name": "AT&T", "account_last4": "5510", "category": "utilities"},
+    {"name": "Spotify", "account_last4": null, "category": "subscriptions"},
+    {"name": "Netflix", "account_last4": null, "category": "subscriptions"},
+    {"name": "Planet Fitness", "account_last4": null, "category": "subscriptions"}
+  ],
+  "caps": {"rent": 2000, "utilities": 300, "groceries": 400, "subscriptions": 60},
+  "default_cap": 60,
+  "weekly_total": 2800,
+  "hours": [7, 21],
+  "one_payment_per_payee_per_cycle": true,
+  "cycle_days": 28,
+  "allowed_actions": ["pay", "transfer_own_accounts", "cancel_subscription", "renew_subscription", "message_user", "report"],
+  "forbidden_actions": ["add_payee", "set_limit", "update_mandate", "send_p2p", "update_payment_method"]
+}
