@@ -1,4 +1,4 @@
-# Backstop policy terms and pricing constants. Illustrative; change here, nowhere else.
+# Backstop policy terms and pricing constants. Change here, nowhere else.
 severity_usd: 120            # average covered loss per in-mandate mistake
 target_loss_ratio: 0.60      # expected claims / gross premium
 commission_share: 0.25       # Backstop's share of gross premium (MGA commission)

@@ -1,6 +1,33 @@
 import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
 import { ShieldIcon } from './marks'
 import { useAuth } from '../lib/auth.jsx'
+import { useWallet } from '../lib/wallet.jsx'
+
+const shortAddr = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '')
+
+function WalletButton() {
+  const { account, connect, connecting, onTargetChain, available } = useWallet()
+  if (account) {
+    return (
+      <span
+        className="hidden shrink-0 items-center gap-1.5 rounded-lg border border-line bg-ink-900/60 px-2.5 py-1.5 font-mono text-xs text-slate-300 sm:inline-flex"
+        title={onTargetChain ? `${account} · on testnet` : `${account} · wrong network — switch to Sepolia`}
+      >
+        <span className={`h-1.5 w-1.5 rounded-full ${onTargetChain ? 'bg-safe' : 'bg-warn'}`} />
+        {shortAddr(account)}
+      </span>
+    )
+  }
+  return (
+    <button
+      onClick={connect}
+      className="btn-ghost hidden shrink-0 whitespace-nowrap !px-3 !py-1.5 text-xs sm:inline-flex"
+      title={available ? 'Connect MetaMask' : 'Install MetaMask'}
+    >
+      {connecting ? 'Connecting…' : 'Connect wallet'}
+    </button>
+  )
+}
 
 const NAV = [
   { to: '/', label: 'Marketplace', end: true },
@@ -45,24 +72,27 @@ export default function Layout({ children }) {
               </NavLink>
             ))}
           </nav>
-          {user ? (
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="hidden max-w-[160px] truncate text-xs text-slate-400 xl:inline">{user.email}</span>
-              <button
-                onClick={() => {
-                  logout()
-                  nav('/')
-                }}
-                className="btn-ghost shrink-0 whitespace-nowrap !px-3 !py-1.5 text-xs"
-              >
-                Log out
-              </button>
-            </div>
-          ) : (
-            <Link to="/login" className="btn-primary hidden sm:inline-flex">
-              Log in / Sign up
-            </Link>
-          )}
+          <div className="flex min-w-0 items-center gap-2.5">
+            <WalletButton />
+            {user ? (
+              <>
+                <span className="hidden max-w-[150px] truncate text-xs text-slate-400 xl:inline">{user.email}</span>
+                <button
+                  onClick={() => {
+                    logout()
+                    nav('/')
+                  }}
+                  className="btn-ghost shrink-0 whitespace-nowrap !px-3 !py-1.5 text-xs"
+                >
+                  Log out
+                </button>
+              </>
+            ) : (
+              <Link to="/login" className="btn-primary shrink-0 whitespace-nowrap hidden sm:inline-flex">
+                Log in / Sign up
+              </Link>
+            )}
+          </div>
         </div>
       </header>
 

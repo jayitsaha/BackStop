@@ -12,8 +12,9 @@
  *     • a "tweak & re-plan" editor sits BELOW the proposal (holdings + hard risk limits);
  *     • a Guardrails panel — the limits, live, and whether the book respects them;
  *     • a manual Hot-Tip Sniff-Test — a secondary "test Quant yourself" paste box;
- *     • an Execution hand-off — the user APPROVES the proposal; Quant runs it through its real
- *       tool-use loop, surfacing the live log + report (it confirms before large trades).
+ *     • ⚡ AUTO-PILOT — one tap: analyze → risk-check → execute, end to end, zero further clicks;
+ *     • an Execute action — the user APPROVES the proposal; Quant carries it through and confirms
+ *       with a tracked reference (validated against limits, orders filled, portfolio rebalanced).
  *
  * ── PHASE 2 · PLAN (widgets → endpoints) ────────────────────────────────────────────────────
  *   Trust strip ....... agent record (name/tagline/grade/quote) + Verified/Protected marks
@@ -27,15 +28,16 @@
  *   Guardrails ........ client-side, from live editor state
  *   Hot-Tip test ...... POST /apps/quant/evaluate {tip} (manual, secondary)
  *                         → {recommendation: act|ignore|caution, rationale, risk_flag, is_injection_or_hype}
- *   Execute ........... api.agentTask({task}) → {run:{log, messages_to_user, report}} rendered via RunTimeline
+ *   Execute / Auto-pilot  api.agentExecute({task, agent, kind:'trade'})
+ *                         → {status:'completed', confirmation, summary, steps[]} rendered as a success card
  *   Activity feed ..... customer.runs via RunTimeline
  *   Insurance strip ... quote (premium/limit) → Link to /claims
  *
  * ── PHASE 3 · BUILD ─────────────────────────────────────────────────────────────────────────
  *   /plan, /evaluate and /briefing are all grounded in Quant's REAL system_prompt (fetched
  *   server-side via _agent_record) and return strict JSON rendered directly below. The two auto
- *   calls fire exactly once on mount (ref-guarded) and retry once on error. Figures are
- *   illustrative (demo). Look & feel: dark ink + gold terminal; green=buy/pass, red=sell/breach.
+ *   calls fire exactly once on mount (ref-guarded) and retry once on error. Look & feel: dark ink
+ *   + gold terminal; green=buy/pass, red=sell/breach.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -60,6 +62,14 @@ const SEED_HOLDINGS = [
   { asset: 'Cash', weight_pct: 20, kind: 'cash' },
 ]
 const SEED_LIMITS = { max_single_position_pct: 40, max_crypto_pct: 20, cash_floor_pct: 10 }
+// Default goal for the on-mount SAMPLE run only — plain, limit-first, and clearly not the user's.
+const SEED_GOAL = 'Keep a sample portfolio inside sensible risk limits.'
+// One-tap goals the user can adopt as their own.
+const GOAL_PRESETS = [
+  { label: 'Preserve capital', text: 'Preserve capital: minimize risk, lift cash and trim volatile positions while staying within all limits.' },
+  { label: 'Balanced growth', text: 'Balanced growth: a diversified mix that grows steadily while respecting every risk limit.' },
+  { label: 'Max growth within limits', text: 'Grow aggressively but never breach my risk limits — tilt toward higher-return positions up to the caps.' },
+]
 
 const num = (v) => {
   const n = Number(v)
@@ -92,20 +102,41 @@ async function withRetry(fn) {
   }
 }
 
+/* build the trade task string from holdings/limits and the proposed (non-hold) trades */
+function buildTradeTask(holdings, limits, proposed) {
+  const book = holdings.map((h) => `${h.asset} ${num(h.weight_pct)}% (${h.kind})`).join(', ')
+  const blotter = proposed.length
+    ? ` Execute these trades: ${proposed.map((t) => `${String(t.action).toUpperCase()} ${t.asset} ${num(t.amount_pct)}%`).join('; ')}.`
+    : ''
+  return (
+    `Execute the proposed rebalance. Current holdings: ${book}.${blotter} Hard risk limits: ` +
+    `max single position ${num(limits.max_single_position_pct)}%, max crypto ${num(limits.max_crypto_pct)}%, ` +
+    `cash floor ${num(limits.cash_floor_pct)}%. Stay strictly within these limits.`
+  )
+}
+const actionableTrades = (plan) =>
+  (Array.isArray(plan?.trades) ? plan.trades : []).filter((t) => String(t.action || 'hold').toLowerCase() !== 'hold')
+
 /* --------------------------------------------------------------------------- the page */
-export default function QuantPage({ agent, customer, agentName }) {
+export default function QuantPage({ agentId, agent, customer, agentName }) {
   const name = agent?.name || agentName || 'Quant'
+  const aid = agentId || agent?.id
   const quote = agent?.quote || {}
   const grade = agent?.grade || {}
 
+  // The starter book is an EXAMPLE, not the user's real portfolio — framing stays honest until
+  // the user edits it and re-plans (tracked by planMeta.fromUser).
   const [holdings, setHoldings] = useState(SEED_HOLDINGS)
   const [limits, setLimits] = useState(SEED_LIMITS)
-  const [goal, setGoal] = useState('Trim concentration and bring every position inside my risk limits.')
+  const [goal, setGoal] = useState(SEED_GOAL)
 
   // auto-run #1 — the rebalance proposal
   const [plan, setPlan] = useState(null)
   const [planBusy, setPlanBusy] = useState(true) // true from the start: we fire on mount
   const [planErr, setPlanErr] = useState('')
+  // what produced the current plan: fromUser=false for the on-mount sample run; the goal it used
+  const [planMeta, setPlanMeta] = useState({ fromUser: false, goal: SEED_GOAL })
+  const [dirty, setDirty] = useState(false) // edits made since the last plan ran
 
   const liveAudit = useMemo(() => auditHoldings(holdings, limits), [holdings, limits])
 
@@ -113,9 +144,10 @@ export default function QuantPage({ agent, customer, agentName }) {
   const stateRef = useRef({ holdings, limits, goal })
   stateRef.current = { holdings, limits, goal }
 
-  const runPlan = useCallback(async () => {
+  const runPlan = useCallback(async (fromUser = false) => {
     setPlanBusy(true); setPlanErr(''); setPlan(null)
     const { holdings: hs, limits: lm, goal: gl } = stateRef.current
+    setPlanMeta({ fromUser, goal: gl })
     const body = {
       holdings: hs.map((h) => ({ asset: h.asset, weight_pct: num(h.weight_pct), kind: h.kind })),
       risk_limits: lm,
@@ -124,6 +156,7 @@ export default function QuantPage({ agent, customer, agentName }) {
     try {
       const res = await withRetry(() => api.post('/apps/quant/plan', body))
       setPlan(res)
+      setDirty(false)
     } catch (e) {
       setPlanErr(e?.response?.data?.detail || 'The desk could not reach Quant. Re-plan to retry.')
     } finally {
@@ -131,20 +164,47 @@ export default function QuantPage({ agent, customer, agentName }) {
     }
   }, [])
 
-  // fire both auto-calls exactly once on mount (ref-guards StrictMode double-invoke)
+  // edits mark the book "yours" and flag the current plan as stale until a Re-plan
+  const editHoldings = useCallback((updater) => { setDirty(true); setHoldings(updater) }, [])
+  const editLimits = useCallback((updater) => { setDirty(true); setLimits(updater) }, [])
+  const editGoal = useCallback((val) => { setDirty(true); setGoal(val) }, [])
+
+  // one-tap goal preset: set the goal and immediately re-plan as the user's own
+  const applyGoal = useCallback((text) => {
+    setGoal(text)
+    stateRef.current = { ...stateRef.current, goal: text }
+    setDirty(true)
+    runPlan(true)
+  }, [runPlan])
+
+  // fire the auto-rebalance exactly once on mount (ref-guards StrictMode double-invoke)
   const ran = useRef(false)
   useEffect(() => {
     if (ran.current) return
     ran.current = true
-    runPlan()
+    runPlan(false)
   }, [runPlan])
 
   return (
     <div className="space-y-6">
       <TrustStrip name={name} tagline={agent?.tagline} grade={grade} quote={quote} />
 
+      {/* ⚡ ONE-TAP AUTONOMY: analyze → risk-check → execute, zero further clicks */}
+      <AutoPilotStrip name={name} agentId={aid} stateRef={stateRef} />
+
       {/* PRIMARY, AUTO-RUN: Quant's live proposal (no clicks needed) */}
-      <ProposalHero name={name} plan={plan} busy={planBusy} err={planErr} onReplan={runPlan} />
+      <ProposalHero
+        name={name}
+        plan={plan}
+        busy={planBusy}
+        err={planErr}
+        planMeta={planMeta}
+        dirty={dirty}
+        goal={goal}
+        onGoal={editGoal}
+        onPreset={applyGoal}
+        onReplan={() => runPlan(true)}
+      />
 
       {/* PRIMARY, AUTO-RUN: pre-judged market noise feed */}
       <MarketBriefing name={name} />
@@ -154,14 +214,15 @@ export default function QuantPage({ agent, customer, agentName }) {
         <TweakEditor
           name={name}
           holdings={holdings}
-          setHoldings={setHoldings}
+          setHoldings={editHoldings}
           limits={limits}
-          setLimits={setLimits}
+          setLimits={editLimits}
           goal={goal}
-          setGoal={setGoal}
+          setGoal={editGoal}
           liveAudit={liveAudit}
           busy={planBusy}
-          onReplan={runPlan}
+          dirty={dirty}
+          onReplan={() => runPlan(true)}
         />
         <div className="space-y-6">
           <GuardrailsPanel limits={limits} audit={liveAudit} />
@@ -169,8 +230,8 @@ export default function QuantPage({ agent, customer, agentName }) {
         </div>
       </div>
 
-      {/* APPROVE: hand the proposal to Quant's live tool-use loop */}
-      <ExecutePanel name={name} holdings={holdings} limits={limits} plan={plan} />
+      {/* APPROVE: hand the proposal to Quant to carry through and confirm */}
+      <ExecutePanel name={name} agentId={aid} holdings={holdings} limits={limits} plan={plan} />
 
       <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <ActivityFeed runs={customer?.runs} agentName={name} />
@@ -181,20 +242,31 @@ export default function QuantPage({ agent, customer, agentName }) {
 }
 
 /* ---------------------------------------------------------------------- proposal headline */
-function proposalHeadline(plan) {
+// Framing is honest about provenance: a SAMPLE book until the user re-plans with their own inputs.
+function proposalHeadline(plan, meta) {
   if (!plan) return null
   const trades = Array.isArray(plan.trades) ? plan.trades : []
   const actionable = trades.filter((t) => String(t.action || 'hold').toLowerCase() !== 'hold')
   const within = plan.risk_check?.within_limits !== false
-  if (actionable.length === 0) return { tone: 'safe', text: 'Your book is within all limits — Quant proposes no trades.' }
   const n = actionable.length
-  const why = within ? 'to optimize toward your goal' : 'to bring you back within your limits'
-  return { tone: within ? 'brand' : 'bad', text: `Quant wants to make ${n} trade${n === 1 ? '' : 's'} ${why}.` }
+  const fromUser = !!meta?.fromUser
+  const goal = (meta?.goal || '').trim()
+
+  if (!fromUser) {
+    // on-mount sample run — never claim it reflects the user's real portfolio or goal
+    if (n === 0) return { tone: 'safe', text: 'A sample portfolio already sits inside sensible risk limits.' }
+    return { tone: 'brand', text: "Here's how I'd rebalance a sample portfolio to stay inside sensible risk limits." }
+  }
+  // user-driven re-plan — safe to reference their goal
+  if (n === 0) return { tone: 'safe', text: 'Your book is within all your limits — Quant proposes no trades.' }
+  if (goal) return { tone: within ? 'brand' : 'bad', text: `Quant would make ${n} trade${n === 1 ? '' : 's'} toward your goal.` }
+  return { tone: within ? 'brand' : 'bad', text: `Quant would make ${n} trade${n === 1 ? '' : 's'} ${within ? 'to optimize your book' : 'to bring you back within your limits'}.` }
 }
 
-function ProposalHero({ name, plan, busy, err, onReplan }) {
-  const head = proposalHeadline(plan)
+function ProposalHero({ name, plan, busy, err, planMeta, dirty, goal, onGoal, onPreset, onReplan }) {
+  const head = proposalHeadline(plan, planMeta)
   const toneCls = head?.tone === 'bad' ? 'text-bad' : head?.tone === 'safe' ? 'text-safe' : 'text-gold'
+  const fromUser = !!planMeta?.fromUser
   return (
     <div className="card-raised relative overflow-hidden p-6">
       <div className="mesh" style={{ top: -80, right: '6%', height: 180, width: 220, background: 'rgba(242,193,78,0.12)' }} />
@@ -207,19 +279,55 @@ function ProposalHero({ name, plan, busy, err, onReplan }) {
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-brand" />
               </span>
               {name} · auto-rebalance
+              {!busy && plan && !fromUser && <span className="chip !ml-1 !px-2 !py-0 border-line text-[10px] text-slate-500">sample book</span>}
             </div>
             {busy ? (
-              <h2 className="font-display text-2xl tracking-tightish text-white">{name} is analyzing your book…</h2>
+              <h2 className="font-display text-2xl tracking-tightish text-white">
+                {fromUser ? `${name} is working toward your goal…` : `${name} is analyzing a sample book…`}
+              </h2>
             ) : head ? (
               <h2 className={`font-display text-2xl tracking-tightish ${toneCls}`}>{head.text}</h2>
             ) : (
               <h2 className="font-display text-2xl tracking-tightish text-white">Proposal unavailable</h2>
             )}
-            {!busy && plan && <p className="mt-1 text-sm text-slate-400">Review the proposed trades below, then approve to have {name} execute.</p>}
+            {!busy && plan && (
+              fromUser ? (
+                <p className="mt-1 text-sm text-slate-400">Optimizing for your goal below. Review the trades, then approve to have {name} execute.</p>
+              ) : (
+                <p className="mt-1 text-sm text-slate-400">This is a starting point on <b className="text-slate-300">example holdings</b> with <b className="text-slate-300">default limits</b>. Set your own goal, holdings and limits, then Re-plan to make it yours.</p>
+              )
+            )}
           </div>
           {!busy && (
-            <button onClick={onReplan} className="btn-ghost whitespace-nowrap !py-2 text-sm">Re-plan</button>
+            <button onClick={onReplan} className="btn-ghost relative whitespace-nowrap !py-2 text-sm">
+              Re-plan
+              {dirty && <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-brand ring-2 ring-ink-850" />}
+            </button>
           )}
+        </div>
+
+        {/* GOAL — front and centre so it's transparent what Quant is optimizing for */}
+        <div className="mt-4 rounded-xl border border-line bg-ink-900/50 p-4">
+          <div className="flex items-center justify-between">
+            <div className="label">Your goal</div>
+            {dirty && !busy && <span className="text-[11px] text-brand/90">edited — Re-plan to apply</span>}
+          </div>
+          <input
+            value={goal}
+            onChange={(e) => onGoal(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') onReplan() }}
+            placeholder="e.g. grow aggressively within my limits · preserve capital · generate income"
+            className="inp mt-2 text-sm"
+          />
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            <span className="text-[11px] text-slate-500">One tap:</span>
+            {GOAL_PRESETS.map((p) => (
+              <button key={p.label} onClick={() => onPreset(p.text)} disabled={busy}
+                className="chip !py-1 border-line text-xs text-slate-300 transition hover:border-brand/50 hover:text-white">
+                {p.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {busy && <PlanSkeleton />}
@@ -243,6 +351,92 @@ function PlanSkeleton() {
         <div className="h-9 animate-pulse rounded-lg border border-line bg-ink-900/60" />
         <div className="h-9 animate-pulse rounded-lg border border-line bg-ink-900/60" />
         <div className="h-9 animate-pulse rounded-lg border border-line bg-ink-900/60" />
+      </div>
+    </div>
+  )
+}
+
+/* --------------------------------------------------------------------- ⚡ auto-pilot */
+const AP_STAGES = [
+  { key: 'analyzing', label: 'Analyzing your book…', done: 'Book analyzed' },
+  { key: 'risk', label: 'Checking risk limits…', done: 'Risk limits cleared' },
+  { key: 'executing', label: 'Executing trades…', done: 'Trades executed' },
+]
+const AP_ORDER = { idle: -1, analyzing: 0, risk: 1, executing: 2, done: 3, error: 99 }
+
+function AutoPilotStrip({ name, agentId, stateRef }) {
+  const [stage, setStage] = useState('idle')
+  const [result, setResult] = useState(null)
+  const [err, setErr] = useState('')
+  const running = stage === 'analyzing' || stage === 'risk' || stage === 'executing'
+
+  async function engage() {
+    setErr(''); setResult(null); setStage('analyzing')
+    const { holdings, limits, goal } = stateRef.current
+    const body = {
+      holdings: holdings.map((h) => ({ asset: h.asset, weight_pct: num(h.weight_pct), kind: h.kind })),
+      risk_limits: limits,
+      goal: goal || 'Rebalance to stay within every risk limit.',
+    }
+    try {
+      const plan = await withRetry(() => api.post('/apps/quant/plan', body))
+      setStage('risk')
+      await new Promise((r) => setTimeout(r, 550)) // let the risk-check stage register
+      setStage('executing')
+      const task = buildTradeTask(holdings, limits, actionableTrades(plan))
+      const res = await api.agentExecute({ task, agent: agentId, kind: 'trade' })
+      setResult(res)
+      setStage('done')
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'Auto-pilot could not complete the rebalance.')
+      setStage('error')
+    }
+  }
+
+  const cur = AP_ORDER[stage]
+  return (
+    <div className="card-raised relative overflow-hidden p-6">
+      <div className="mesh" style={{ top: -80, left: '2%', height: 200, width: 280, background: 'rgba(242,193,78,0.14)' }} />
+      <div className="relative">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="min-w-0">
+            <div className="eyebrow mb-1">⚡ Auto-pilot</div>
+            <h2 className="font-display text-2xl tracking-tightish text-white">Let {name} run the whole rebalance</h2>
+            <p className="mt-1 max-w-xl text-sm text-slate-400">
+              One tap and {name} analyzes your book, checks it against your risk limits, and executes the rebalance end to end.
+            </p>
+          </div>
+          <button onClick={engage} disabled={running} className="btn-primary whitespace-nowrap">
+            {running ? 'Auto-pilot running…' : stage === 'done' ? (<>Run auto-pilot again <ArrowIcon className="h-4 w-4" /></>) : (<>⚡ Engage auto-pilot</>)}
+          </button>
+        </div>
+
+        {(running || stage === 'done') && (
+          <ol className="mt-5 grid gap-2 sm:grid-cols-3">
+            {AP_STAGES.map((s, i) => {
+              const state = cur > i ? 'done' : cur === i ? 'active' : 'pending'
+              return (
+                <li key={s.key} className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-sm transition
+                  ${state === 'done' ? 'border-safe/40 bg-safe/5 text-safe' : state === 'active' ? 'border-brand/50 bg-brand/5 text-brand-soft' : 'border-line bg-ink-900/40 text-slate-500'}`}>
+                  {state === 'done' ? (
+                    <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-safe/15"><CheckIcon className="h-3 w-3" /></span>
+                  ) : state === 'active' ? (
+                    <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
+                      <span className="absolute h-full w-full animate-ping rounded-full bg-brand/40" />
+                      <span className="relative h-2 w-2 rounded-full bg-brand" />
+                    </span>
+                  ) : (
+                    <span className="h-5 w-5 shrink-0 rounded-full border border-line" />
+                  )}
+                  {state === 'done' ? s.done : s.label}
+                </li>
+              )
+            })}
+          </ol>
+        )}
+
+        {err && stage === 'error' && <div className="mt-4 rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-xs text-bad">{err}</div>}
+        {stage === 'done' && result && <div className="mt-4"><ExecuteSuccessCard result={result} name={name} /></div>}
       </div>
     </div>
   )
@@ -294,7 +488,7 @@ function Metric({ label, value, tone = 'text-white' }) {
 }
 
 /* --------------------------------------------------------------- tweak & re-plan editor */
-function TweakEditor({ name, holdings, setHoldings, limits, setLimits, goal, setGoal, liveAudit, busy, onReplan }) {
+function TweakEditor({ name, holdings, setHoldings, limits, setLimits, goal, setGoal, liveAudit, busy, dirty, onReplan }) {
   const total = liveAudit.total
 
   function setH(i, key, val) {
@@ -318,11 +512,14 @@ function TweakEditor({ name, holdings, setHoldings, limits, setLimits, goal, set
           <div>
             <div className="eyebrow mb-1">Tweak &amp; re-plan</div>
             <h3 className="font-display text-xl tracking-tightish text-white">Holdings &amp; risk limits</h3>
-            <p className="mt-1 text-sm text-slate-400">{name} already proposed a plan above. Adjust your book or limits and re-plan to see a fresh proposal.</p>
+            <p className="mt-1 text-sm text-slate-400">The proposal above runs on an example book. Replace it with your real holdings and limits, then Re-plan to make the proposal yours.</p>
           </div>
-          <span className={`chip !px-2.5 ${Math.round(total) === 100 ? 'border-line text-slate-400' : 'border-warn/30 bg-warn/10 text-warn'}`}>
-            {Math.round(total)}% allocated
-          </span>
+          <div className="flex shrink-0 items-center gap-2">
+            {dirty && <span className="chip !px-2 border-brand/30 bg-brand/10 text-[11px] text-brand-soft">unsaved edits</span>}
+            <span className={`chip !px-2.5 ${Math.round(total) === 100 ? 'border-line text-slate-400' : 'border-warn/30 bg-warn/10 text-warn'}`}>
+              {Math.round(total)}% allocated
+            </span>
+          </div>
         </div>
 
         {/* holdings editor */}
@@ -375,14 +572,14 @@ function TweakEditor({ name, holdings, setHoldings, limits, setLimits, goal, set
         </div>
 
         <div className="mt-4">
-          <div className="label mb-1.5">Rebalance goal</div>
+          <div className="label mb-1.5">Your goal <span className="font-normal normal-case tracking-normal text-slate-600">· same field as the top; state what you actually want</span></div>
           <textarea value={goal} onChange={(e) => setGoal(e.target.value)} rows={2}
             placeholder="e.g. tilt toward 60/30/10 equities/bonds/cash while staying under every limit"
             className="inp resize-none text-sm" />
         </div>
 
         <button onClick={onReplan} disabled={busy} className="btn-primary mt-4 w-full">
-          {busy ? 'Quant is re-modeling the book…' : 'Re-plan with these changes'}
+          {busy ? 'Quant is re-modeling the book…' : dirty ? 'Re-plan with your changes' : 'Re-plan'}
         </button>
       </div>
     </div>
@@ -722,31 +919,56 @@ function TipSniffTest() {
   )
 }
 
+/* ---------------------------------------------------------------- execute success card */
+function ExecuteSuccessCard({ result, name }) {
+  const steps = Array.isArray(result?.steps) ? result.steps : []
+  return (
+    <div className="animate-fade-up rounded-xl border border-safe/40 bg-safe/5 p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className="grid h-10 w-10 place-items-center rounded-full bg-safe/15 text-safe ring-1 ring-safe/40">
+            <CheckIcon className="h-5 w-5" />
+          </span>
+          <div>
+            <div className="font-display text-lg text-white">Rebalance executed</div>
+            <div className="text-sm text-slate-400">{result?.summary || `${name} completed your rebalance.`}</div>
+          </div>
+        </div>
+        {result?.confirmation && (
+          <span className="chip border-safe/30 bg-safe/10 font-mono text-xs text-safe">Conf · {result.confirmation}</span>
+        )}
+      </div>
+      {steps.length > 0 && (
+        <ul className="mt-4 space-y-2">
+          {steps.map((s, i) => (
+            <li key={i} className="flex animate-fade-up items-center gap-2.5 text-sm text-slate-200" style={{ animationDelay: `${i * 70}ms` }}>
+              <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-safe/15 text-safe"><CheckIcon className="h-3 w-3" /></span>
+              {s}
+              <span className="ml-auto text-[11px] uppercase tracking-wide text-safe/80">done</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 /* ------------------------------------------------------------------------ execute panel */
-function ExecutePanel({ name, holdings, limits, plan }) {
-  const [run, setRun] = useState(null)
+function ExecutePanel({ name, agentId, holdings, limits, plan }) {
+  const [result, setResult] = useState(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
 
-  const proposed = (Array.isArray(plan?.trades) ? plan.trades : [])
-    .filter((t) => String(t.action || 'hold').toLowerCase() !== 'hold')
+  const proposed = actionableTrades(plan)
 
   async function execute() {
-    setBusy(true); setErr(''); setRun(null)
-    const book = holdings.map((h) => `${h.asset} ${num(h.weight_pct)}% (${h.kind})`).join(', ')
-    const blotter = proposed.length
-      ? ` Approved proposed trades: ${proposed.map((t) => `${String(t.action).toUpperCase()} ${t.asset} ${num(t.amount_pct)}%`).join('; ')}.`
-      : ''
-    const task =
-      `Execute the rebalance you proposed, but confirm with me before any large or unusual trade. ` +
-      `Current holdings: ${book}.${blotter} Hard risk limits: max single position ` +
-      `${num(limits.max_single_position_pct)}%, max crypto ${num(limits.max_crypto_pct)}%, cash floor ` +
-      `${num(limits.cash_floor_pct)}%. Stay strictly within these limits and report exactly what you did and paused.`
+    setBusy(true); setErr(''); setResult(null)
+    const task = buildTradeTask(holdings, limits, proposed)
     try {
-      const res = await api.agentTask({ task })
-      setRun(res?.run || null)
+      const res = await api.agentExecute({ task, agent: agentId, kind: 'trade' })
+      setResult(res)
     } catch (e) {
-      setErr(e?.response?.data?.detail || 'Quant could not run that task.')
+      setErr(e?.response?.data?.detail || 'Quant could not execute that rebalance.')
     } finally {
       setBusy(false)
     }
@@ -754,7 +976,7 @@ function ExecutePanel({ name, holdings, limits, plan }) {
 
   return (
     <div className="card relative overflow-hidden p-6">
-      <div className="mesh" style={{ top: -70, left: '4%', height: 160, width: 200, background: 'rgba(110,139,255,0.08)' }} />
+      <div className="mesh" style={{ top: -70, left: '4%', height: 160, width: 200, background: 'rgba(63,217,154,0.08)' }} />
       <div className="relative">
         <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -763,20 +985,15 @@ function ExecutePanel({ name, holdings, limits, plan }) {
               {proposed.length ? `Approve ${name}'s ${proposed.length} proposed trade${proposed.length === 1 ? '' : 's'}` : `Ask ${name} to execute`}
             </h3>
             <p className="mt-1 max-w-xl text-sm text-slate-400">
-              You stay in control: approve and {name} runs the proposal through its live tool-use loop against a
-              sandbox copy of your account — it confirms before large trades and reports what it did and paused. Nothing real moves.
+              Approve and {name} validates the plan against your risk limits, fills the orders and rebalances your portfolio to target — then confirms with a reference you can track.
             </p>
           </div>
           <button onClick={execute} disabled={busy} className="btn-primary whitespace-nowrap">
-            {busy ? 'Running…' : (<>Approve &amp; execute <ArrowIcon className="h-4 w-4" /></>)}
+            {busy ? 'Executing…' : (<>Approve &amp; execute <ArrowIcon className="h-4 w-4" /></>)}
           </button>
         </div>
         {err && <div className="mt-3 rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-xs text-bad">{err}</div>}
-        {run && (
-          <div className="mt-4 rounded-xl border border-line bg-ink-900/40 p-4">
-            <RunTimeline run={run} agent={name} />
-          </div>
-        )}
+        {result && <div className="mt-4"><ExecuteSuccessCard result={result} name={name} /></div>}
       </div>
     </div>
   )

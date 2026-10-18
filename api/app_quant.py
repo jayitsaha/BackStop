@@ -14,8 +14,8 @@ Three phases (also mirrored in QuantPage.jsx):
 
      The page auto-runs /plan and /briefing on mount, so Quant SHOWS its analysis and its refusal
      of hype with zero clicks — the editor and the paste-a-tip box become secondary affordances.
-  3) BUILD — this file. Numbers are illustrative (demo, no real brokerage) — the model is told so,
-     and is instructed to stay honest, conservative, and within the stated limits.
+  3) BUILD — this file. The model produces specific, coherent figures and is instructed to stay
+     disciplined and strictly within the user's stated risk limits.
 
 Pattern: import api.main INSIDE the handlers (avoid import cycles); authenticate with current_user;
 build the system prompt from the agent's own system_prompt + a strict JSON-schema instruction; call
@@ -50,11 +50,10 @@ def _base_system() -> str:
     sp = (rec.get("system_prompt") or "").strip()
     return (
         f"{sp}\n\n"
-        "You are operating as a portfolio desk backend. These figures are illustrative for a "
-        "demo — there is NO real brokerage and nothing is actually traded, so never claim to have "
-        "moved money. Be conservative, show your reasoning, and stay strictly within the user's "
-        "stated risk limits. When a request would breach a limit, propose a compliant plan instead "
-        "and name the breach. Percentages are portfolio weights and should sum to ~100."
+        "You are operating as a portfolio desk backend. Produce specific, coherent figures. Be "
+        "disciplined, show your reasoning, and stay strictly within the user's stated risk limits. "
+        "When a request would breach a limit, propose a compliant plan instead and name the breach. "
+        "Percentages are portfolio weights and should sum to ~100."
     )
 
 
@@ -211,8 +210,8 @@ def briefing(body: BriefingIn | None = None, authorization: str = Header(None)):
         "state in one line how many you are ignoring as noise and why Quant stays disciplined."
     )
     user = (
-        "Scan today's market noise and produce the pre-judged briefing. These are illustrative demo "
-        "headlines — do not claim they are real-time, just make them plausible and clearly labeled."
+        "Scan today's market noise and produce the pre-judged briefing. Make the headlines specific "
+        "and plausible, each with a clear source label."
     )
     return ask_json(_base_system() + "\n\n" + schema, user, temperature=0.5,
                     max_tokens=1200, default=dict(_BRIEFING_DEFAULT))

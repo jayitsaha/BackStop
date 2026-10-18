@@ -217,6 +217,54 @@ def _stamp_head() -> dict:
     return ots
 
 
+def _ots_bin() -> str:
+    b = os.path.join(os.path.dirname(sys.executable), "ots")
+    return b if os.path.exists(b) else "ots"
+
+
+def _ots_upgrade() -> dict:
+    """Ask the Bitcoin calendars whether the pending stamp is now in a block; update the stored status.
+
+    This is what the 'Check Bitcoin' button calls. If the calendars have committed the aggregation to a
+    Bitcoin block, the proof upgrades to a BitcoinBlockHeaderAttestation and status flips to 'confirmed'.
+    """
+    import re
+    head = firebase.db_get("chain/head") or {}
+    ots = head.get("ots") or {}
+    pb = ots.get("proof_b64")
+    if not pb:
+        return {"status": ots.get("status", "unavailable"), "error": "nothing stamped yet"}
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "head.ots")
+            with open(path, "wb") as fh:
+                fh.write(base64.b64decode(pb))
+            subprocess.run([_ots_bin(), "--no-cache", "upgrade", path], capture_output=True, text=True, timeout=60)
+            info = subprocess.run([_ots_bin(), "--no-cache", "info", path], capture_output=True, text=True, timeout=30).stdout
+            with open(path, "rb") as fh:
+                raw = fh.read()
+        m = re.search(r"BitcoinBlockHeaderAttestation\((\d+)\)", info)
+        if m:
+            block = int(m.group(1))
+            new = {**ots, "status": "confirmed", "proof_b64": base64.b64encode(raw).decode(),
+                   "bitcoin_block": block, "detail": f"Confirmed in Bitcoin block #{block}."}
+        else:
+            new = {**ots, "status": "pending", "proof_b64": base64.b64encode(raw).decode(),
+                   "detail": "Still pending — the calendars haven't committed it to a Bitcoin block yet. Try again in a bit."}
+        firebase.db_patch("chain/head/ots", new)
+        return {"status": new["status"], "bitcoin_block": new.get("bitcoin_block"), "detail": new.get("detail")}
+    except FileNotFoundError:
+        return {"status": ots.get("status", "pending"), "error": "opentimestamps-client not installed"}
+    except Exception as exc:  # pragma: no cover
+        return {"status": ots.get("status", "pending"), "error": str(exc)[:200]}
+
+
+@router.post("/chain/bitcoin-upgrade")
+def bitcoin_upgrade():
+    """Re-check the Bitcoin calendars and upgrade the stamp to 'confirmed' if it's now in a block."""
+    return _ots_upgrade()
+
+
 # ============================ routes ============================
 @router.post("/chain/anchor/{agent_id}")
 def anchor_one(agent_id: str, authorization: str = Header(None)):

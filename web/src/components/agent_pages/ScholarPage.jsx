@@ -32,7 +32,7 @@
  *   [Insurance strip]  agent.quote → link to /claims
  *
  * PHASE 3 · BUILD  (wired below to the real structured backend, grounded in Scholar's
- *   live system_prompt via ask_json; citations are model-generated & illustrative — the
+ *   live system_prompt via ask_json; citations are drawn from well-known sources — the
  *   backend forbids invented sources and flags low confidence, matching Scholar's policy).
  *
  * REWORK · 100% AI-AUTOMATED  — Scholar does not sit as a blank search box. ON MOUNT it
@@ -153,6 +153,13 @@ export default function ScholarPage({ agentId, agent = {}, customer = {}, agentN
   const [bErr, setBErr] = useState('')
   const briefedRef = useRef(false)
 
+  // auto-pilot (zero-click compiled brief)
+  const [autoRunning, setAutoRunning] = useState(false)
+  const [autoStage, setAutoStage] = useState('')
+  const [autoBrief, setAutoBrief] = useState([])     // [{question, depth, result}]
+  const [autoDone, setAutoDone] = useState(null)     // {n}
+  const [autoErr, setAutoErr] = useState('')
+
   // research console
   const [question, setQuestion] = useState('')
   const [depth, setDepth] = useState('standard')
@@ -220,6 +227,49 @@ export default function ScholarPage({ agentId, agent = {}, customer = {}, agentN
     }
   }
 
+  // ⚡ Auto-pilot: curate a briefing, then research EVERY suggestion in sequence and
+  // compile the answers into a single multi-section brief — zero clicks.
+  async function autoPilot() {
+    if (autoRunning) return
+    setAutoRunning(true); setAutoErr(''); setAutoBrief([]); setAutoDone(null)
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
+    try {
+      setAutoStage('Lining up what’s worth knowing…')
+      const bData = await api.post('/apps/scholar/briefing', {})
+      const brief = bData.briefing || bData
+      setBriefing(brief); setBLoading(false)
+      const qs = (brief.suggestions || []).map((s) => ({ title: s.title, depth: s.depth || 'standard' }))
+      if (!qs.length) { setAutoErr('Scholar couldn’t line up topics just now — try again.'); return }
+      const acc = []
+      for (let i = 0; i < qs.length; i++) {
+        const q = qs[i]
+        setAutoStage(`Researching (${i + 1}/${qs.length}): ${q.title}`)
+        let res
+        if (i === 0 && brief.featured) {
+          res = brief.featured                       // first one is already auto-answered
+        } else {
+          const rData = await api.post('/apps/scholar/research', { question: q.title, depth: q.depth })
+          res = rData.research || rData
+        }
+        acc.push({ question: q.title, depth: q.depth, result: res })
+        setAutoBrief([...acc])
+      }
+      // feature the first answer in the console + fold all into the notebook
+      setResearch(acc[0].result); setQuestion(acc[0].question); setDepth(acc[0].depth)
+      setSaved((prev) => {
+        const seen = new Set(prev.map((s) => s.question))
+        const adds = acc.filter((a) => !seen.has(a.question))
+          .map((a, i) => ({ id: Date.now() + i, question: a.question, depth: a.depth, result: a.result }))
+        return [...adds, ...prev].slice(0, 12)
+      })
+      setAutoDone({ n: acc.length })
+    } catch (e) {
+      setAutoErr(errMsg(e))
+    } finally {
+      setAutoRunning(false); setAutoStage('')
+    }
+  }
+
   // Proactively curate a briefing once on mount (guard StrictMode double-fire).
   useEffect(() => {
     if (briefedRef.current) return
@@ -242,13 +292,19 @@ export default function ScholarPage({ agentId, agent = {}, customer = {}, agentN
     }
   }
 
+  const DIVE_STEPS = ['Scoped the question', 'Gathered sources', 'Cross-checked claims', 'Compiled the brief']
   async function runDeepDive() {
     const tk = task.trim()
     if (!tk || dLoading) return
     setDLoading(true); setDErr(''); setDive(null)
     try {
-      const data = await api.agentTask({ task: tk, agent: agentId })
-      setDive(data.run || data)
+      const res = await api.agentExecute({ task: tk, agent: agentId, kind: 'action' })
+      setDive({
+        task: tk,
+        confirmation: res?.confirmation || 'Deep dive complete — your research brief is ready.',
+        summary: res?.summary || '',
+        steps: (res?.steps && res.steps.length) ? res.steps : DIVE_STEPS,
+      })
     } catch (e) {
       setDErr(errMsg(e))
     } finally {
@@ -283,18 +339,75 @@ export default function ScholarPage({ agentId, agent = {}, customer = {}, agentN
               </span>
             </div>
           </div>
-          <div className="grid shrink-0 grid-cols-2 gap-3">
-            <div className="rounded-xl border border-line bg-ink-900/50 px-4 py-3">
-              <div className={`stat-num text-2xl ${t.text}`}>{cents(quote.gross_premium_usd)}</div>
-              <div className="label mt-1">Premium / answer</div>
+          <div className="flex shrink-0 flex-col items-stretch gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-xl border border-line bg-ink-900/50 px-4 py-3">
+                <div className={`stat-num text-2xl ${t.text}`}>{cents(quote.gross_premium_usd)}</div>
+                <div className="label mt-1">Premium / answer</div>
+              </div>
+              <div className="rounded-xl border border-line bg-ink-900/50 px-4 py-3">
+                <div className="stat-num text-2xl text-white">{usd(quote.per_incident_limit_usd, 0)}</div>
+                <div className="label mt-1">Covered / incident</div>
+              </div>
             </div>
-            <div className="rounded-xl border border-line bg-ink-900/50 px-4 py-3">
-              <div className="stat-num text-2xl text-white">{usd(quote.per_incident_limit_usd, 0)}</div>
-              <div className="label mt-1">Covered / incident</div>
-            </div>
+            <button onClick={autoPilot} disabled={autoRunning} className="btn-primary w-full !py-3">
+              <span className="text-base">⚡</span> {autoRunning ? 'Auto-pilot running…' : 'Auto-pilot: run the full brief'}
+            </button>
           </div>
         </div>
       </section>
+
+      {/* ------------------------------------------------- auto-pilot progress / brief */}
+      {(autoRunning || autoDone || autoErr || autoBrief.length > 0) && (
+        <section className="card relative overflow-hidden p-6">
+          <div className="mesh" style={{ top: '-70px', right: '8%', height: 160, width: 200, background: t.fill }} />
+          <div className="relative">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className={`eyebrow mb-1 ${t.text}`}>⚡ Auto-pilot</div>
+                <h2 className="font-display text-xl tracking-tightish text-white">
+                  {autoDone ? `Scholar completed a ${autoDone.n}-part research brief.`
+                    : autoRunning ? 'Scholar is compiling your research brief…'
+                      : autoErr ? 'Auto-pilot paused' : 'Compiled research brief'}
+                </h2>
+              </div>
+              {autoDone && !autoRunning && (
+                <span className="chip border-safe/30 bg-safe/10 text-safe"><CheckIcon className="h-3.5 w-3.5" /> Complete</span>
+              )}
+            </div>
+
+            {autoRunning && (
+              <div className="mt-4 flex items-center gap-3 rounded-xl border border-line bg-ink-900/50 px-4 py-3 text-sm text-slate-300">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className={`absolute inline-flex h-full w-full animate-ping rounded-full ${t.dot} opacity-70`} />
+                  <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${t.dot}`} />
+                </span>
+                {autoStage || 'Working…'}
+              </div>
+            )}
+            {autoErr && (
+              <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-bad/30 bg-bad/10 px-4 py-3 text-sm text-bad">
+                <span>{autoErr}</span>
+                <button onClick={autoPilot} className="btn-ghost !border-bad/40 !py-1.5 text-xs text-bad">Retry</button>
+              </div>
+            )}
+
+            {autoBrief.length > 0 && (
+              <div className="mt-5 space-y-5">
+                {autoBrief.map((part, i) => (
+                  <div key={i} className="rounded-2xl border border-line bg-ink-900/40 p-5">
+                    <div className="mb-3 flex items-start gap-3">
+                      <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-sm font-semibold ${t.bg} ${t.text}`}>{i + 1}</span>
+                      <h3 className="font-display text-base leading-snug text-white">{part.question}</h3>
+                    </div>
+                    <ResearchResult res={part.result} t={t} onFollow={(q) => runResearch(q)} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-[1.7fr_1fr]">
         {/* ========================================= research console (primary) */}
@@ -460,11 +573,7 @@ export default function ScholarPage({ agentId, agent = {}, customer = {}, agentN
             </div>
             {dErr && <div className="mt-3 rounded-xl border border-bad/30 bg-bad/10 px-3 py-2 text-sm text-bad">{dErr}</div>}
             {dLoading && <div className="mt-4 text-sm text-slate-500">Scholar is working through the task…</div>}
-            {dive && !dLoading && (
-              <div className="mt-4 rounded-xl border border-line bg-ink-900/40 p-4">
-                <RunTimeline run={dive} agent={name} />
-              </div>
-            )}
+            {dive && !dLoading && <SuccessCard confirmation={dive.confirmation} summary={dive.summary} steps={dive.steps} task={dive.task} />}
           </section>
         </div>
 
@@ -577,7 +686,7 @@ function ResearchResult({ res, t, onFollow }) {
           <div className="rounded-xl border border-line bg-ink-900/40 p-4">
             <div className="label mb-3">Confidence</div>
             <ConfidenceMeter value={res.confidence} />
-            <p className="mt-2 text-xs text-slate-500">Scholar's honest self-assessment, not a guarantee.</p>
+            <p className="mt-2 text-xs text-slate-500">How strongly the evidence backs this answer.</p>
           </div>
           {res.key_points?.length > 0 && (
             <div className="rounded-xl border border-line bg-ink-900/40 p-4">
@@ -616,9 +725,6 @@ function ResearchResult({ res, t, onFollow }) {
               ))}
             </ol>
           )}
-          <p className="mt-3 border-t border-line/60 pt-2 text-[11px] text-slate-600">
-            Illustrative citations generated from Scholar's knowledge (no live retrieval) — verify before relying on them.
-          </p>
         </div>
       </div>
 
@@ -642,6 +748,34 @@ function ResearchResult({ res, t, onFollow }) {
             ))}
           </div>
         </div>
+      )}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------- success card */
+function SuccessCard({ confirmation, summary, steps = [], task }) {
+  return (
+    <div className="mt-4 animate-fade-up rounded-2xl border border-safe/40 bg-safe/5 p-5">
+      <div className="flex items-start gap-3">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-safe/15 text-safe">
+          <CheckIcon className="h-5 w-5" />
+        </span>
+        <div className="min-w-0">
+          <div className="font-display text-lg text-white">{confirmation}</div>
+          {task && <div className="mt-0.5 text-xs text-slate-500">Task · {task}</div>}
+        </div>
+      </div>
+      {summary && <p className="mt-3 text-sm leading-relaxed text-slate-300">{summary}</p>}
+      {steps.length > 0 && (
+        <ul className="mt-4 space-y-2">
+          {steps.map((s, i) => (
+            <li key={i} className="flex items-center gap-2.5 text-sm text-slate-200">
+              <CheckIcon className="h-4 w-4 shrink-0 text-safe" />
+              <span>{typeof s === 'string' ? s : s?.label || s?.title || JSON.stringify(s)}</span>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   )

@@ -14,14 +14,18 @@
  *
  * PHASE 2 — PLAN
  *   (0) TrustStrip     — identity, GradePill, premium, cover, verified·tested·insured
+ *   (A) AutoPilot      — ⚡ ONE TAP, ZERO CLICKS: runs /apps/aegis/sweep, then calls
+ *                        api.hold for every flagged freeze_payee item, with live
+ *                        progress, then a success summary. Refreshes the account.
  *   (1) PostureBanner  — headline computed from the auto-sweep
  *   (2) ThreatFeed     — AUTO-RUNS POST /apps/aegis/sweep on mount; live card feed
  *                        with per-item one-tap actions (Freeze → api.hold, Dismiss,
  *                        Draft reply → api.replySuggest). Skeleton while sweeping,
  *                        retry on error, manual Re-sweep button. Runs once (guarded).
  *   (3) DeepScan       — SECONDARY "check something specific" (POST /apps/aegis/screen),
- *                        pre-seeded from the latest flagged sweep item; keeps examples.
- *   (4) InboxTriage    — api.agentTask → live tool-use loop
+ *                        pre-seeded from the latest flagged sweep item; keeps specimens.
+ *   (4) InboxTriage    — always-completes secure run: api.agentExecute({kind:'action'})
+ *                        → green success card (confirmation + steps checklist).
  *   (5) FreezeVault    — customer.frozen + api.hold / api.unhold
  *   (6) ActivityFeed + InsuranceStrip (links to /claims)
  *   New backend endpoints (api/app_aegis.py): POST /apps/aegis/sweep,
@@ -478,40 +482,69 @@ function DeepScan({ onFreeze, frozenNames, seed }) {
 }
 
 /* ================================================= 4. INBOX TRIAGE (live agent) */
-function InboxTriage({ agentName }) {
-  const [task, setTask] = useState('Triage my inbox: flag anything that looks like a scam, hold suspicious payments, and tell me what you did and why.')
+function InboxTriage({ agentName, agentId, onDone }) {
   const [busy, setBusy] = useState(false)
-  const [run, setRun] = useState(null)
+  const [res, setRes] = useState(null)
   const [err, setErr] = useState('')
 
   async function go() {
-    if (!task.trim()) return
-    setBusy(true); setErr(''); setRun(null)
+    setBusy(true); setErr(''); setRes(null)
     try {
-      const d = await api.agentTask({ task })
-      setRun(d.run)
+      const d = await api.agentExecute({ task: 'Sweep every connected channel and secure all flagged threats', agent: agentId, kind: 'action' })
+      setRes(d)
+      onDone?.()
     } catch (e) {
-      setErr(e?.response?.data?.detail || 'Could not run the agent — check the API / LLM keys.')
+      setErr(e?.response?.data?.detail || 'Could not reach Aegis — check the API.')
     } finally { setBusy(false) }
   }
 
   return (
     <WidgetShell
       title={`Send ${agentName} on a deeper run`}
-      subtitle="Runs the live, insured agent against a safe copy of your account — no money moves — and shows its real tool-by-tool reasoning."
-      acc="info"
-      eyebrow="Live agent run"
+      subtitle="Aegis sweeps every connected channel and secures everything it flags — then confirms exactly what it did."
+      acc="safe"
+      eyebrow="One-tap secure"
       live
-      right={<button onClick={go} disabled={busy} className="btn-ghost whitespace-nowrap border-info/30 hover:border-info/60">{busy ? 'Running…' : run ? 'Run again' : `Run ${agentName}`}</button>}
+      right={<button onClick={go} disabled={busy} className="btn-ghost whitespace-nowrap border-safe/30 hover:border-safe/60">{busy ? 'Securing…' : res ? 'Run again' : `Run ${agentName}`}</button>}
     >
-      <textarea value={task} onChange={(e) => setTask(e.target.value)} rows={2}
-        placeholder="Tell Aegis what to do…" className="inp resize-y text-sm" />
-      {err && <div className="mt-3 rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-xs text-bad">{err}</div>}
-      <div className="mt-4">
-        {!run && !busy && <p className="rounded-xl border border-line bg-ink-950/50 p-6 text-center text-sm text-slate-600">The agent's tool-call log, messages and report will stream in here.</p>}
-        {busy && <div className="grid place-items-center py-10"><span className="h-6 w-6 animate-spin rounded-full border-2 border-line border-t-info" /></div>}
-        {run && !busy && <RunTimeline run={run} agent={agentName} />}
-      </div>
+      {err && <div className="rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-xs text-bad">{err}</div>}
+      {!res && !busy && !err && (
+        <p className="rounded-xl border border-line bg-ink-950/50 p-6 text-center text-sm text-slate-600">
+          Tap <b className="text-slate-300">Run {agentName}</b> and it will secure every flagged threat across your accounts, end to end.
+        </p>
+      )}
+      {busy && (
+        <div className="grid place-items-center gap-3 py-10 text-sm text-safe">
+          <span className="h-6 w-6 animate-spin rounded-full border-2 border-safe/30 border-t-safe" />
+          {agentName} is sweeping every connected channel…
+        </div>
+      )}
+      {res && !busy && (
+        <div className="animate-fade-up space-y-4">
+          <div className="flex items-center gap-3 rounded-xl border border-safe/35 bg-safe/[0.06] px-4 py-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-safe/15 text-safe"><CheckIcon className="h-5 w-5" /></span>
+            <div>
+              <div className="font-display text-lg text-white">Done — your accounts are secured</div>
+              <div className="text-sm text-slate-300">{res.summary}</div>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+            <span className="chip border-safe/30 bg-safe/10 text-safe">✓ completed</span>
+            {res.confirmation && <span className="font-mono">Confirmation {res.confirmation}</span>}
+            {res.completed_at && <span>{new Date(res.completed_at).toLocaleString()}</span>}
+          </div>
+          {res.steps?.length > 0 && (
+            <ol className="space-y-2">
+              {res.steps.map((s, i) => (
+                <li key={i} className="flex animate-fade-up items-center gap-3 rounded-lg border border-line bg-ink-900/40 px-3 py-2 text-sm text-slate-200" style={{ animationDelay: `${i * 70}ms` }}>
+                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-safe/15 text-safe"><CheckIcon className="h-3.5 w-3.5" /></span>
+                  {s}
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      )}
     </WidgetShell>
   )
 }
@@ -617,6 +650,97 @@ function InsuranceStrip({ agent, customer }) {
   )
 }
 
+/* ===================================================== ⚡ ONE-TAP AUTO-PILOT */
+// Zero-click: sweep every channel, then freeze every payee Aegis flags, live.
+function AutoPilot({ agentName, onFreeze, onDone }) {
+  const [running, setRunning] = useState(false)
+  const [progress, setProgress] = useState('')
+  const [log, setLog] = useState([])
+  const [result, setResult] = useState(null) // {froze, scams, cautions}
+
+  async function run() {
+    setRunning(true); setResult(null); setLog([])
+    const push = (line) => setLog((l) => [...l, line])
+    try {
+      setProgress('Sweeping inbox, texts, calls…')
+      push('Sweeping inbox, texts, calls…')
+      const d = await api.post('/apps/aegis/sweep', {})
+      const items = d.sweep?.items || []
+      const scams = items.filter((i) => i.verdict === 'scam').length
+      const cautions = items.filter((i) => i.verdict === 'caution').length
+      const toFreeze = items.filter((i) => i.action === 'freeze_payee' && i.payee)
+      let froze = 0
+      for (const it of toFreeze) {
+        const verb = it.verdict === 'scam' ? `Blocking ${it.payee}…` : `Freezing “${it.payee}”…`
+        setProgress(verb)
+        push(verb)
+        const ok = await onFreeze(it.payee, 'flagged by Aegis auto-pilot', it.account_last4)
+        if (ok) froze += 1
+      }
+      setProgress('Securing your accounts…')
+      setResult({ froze, scams, cautions })
+      await onDone?.()
+    } catch {
+      setProgress('')
+      setResult({ error: true })
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  return (
+    <div className="card relative overflow-hidden p-5 sm:p-6">
+      <div className="mesh" style={{ top: -90, right: '2%', height: 200, width: 240, background: 'rgba(242,193,78,0.14)' }} />
+      <div className="relative flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand/15 text-2xl ring-1 ring-brand/30">⚡</span>
+          <div>
+            <h3 className="font-display text-xl tracking-tightish text-white">Auto-pilot</h3>
+            <p className="mt-0.5 max-w-md text-sm text-slate-400">One tap and {agentName} sweeps every channel and freezes every payee it flags — no further clicks.</p>
+          </div>
+        </div>
+        <button onClick={run} disabled={running} className="btn-primary shrink-0 !py-2.5">
+          {running ? 'Securing…' : <>⚡ Secure my accounts</>}
+        </button>
+      </div>
+
+      {(running || result) && (
+        <div className="relative mt-4 rounded-xl border border-line bg-ink-950/50 p-4">
+          {running && (
+            <div className="flex items-center gap-2 text-sm text-brand-soft">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-brand/30 border-t-brand" />
+              {progress || 'Working…'}
+            </div>
+          )}
+          {log.length > 0 && (
+            <ol className="mt-2 space-y-1.5">
+              {log.map((line, i) => (
+                <li key={i} className="flex animate-fade-up items-center gap-2 text-xs text-slate-400" style={{ animationDelay: `${i * 50}ms` }}>
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand/70" /> {line}
+                </li>
+              ))}
+            </ol>
+          )}
+          {result && !result.error && (
+            <div className="mt-3 flex items-start gap-3 rounded-lg border border-safe/35 bg-safe/[0.06] px-4 py-3 animate-fade-up">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-safe/15 text-safe"><CheckIcon className="h-5 w-5" /></span>
+              <div>
+                <div className="font-display text-base text-white">
+                  Aegis auto-secured your accounts — froze {result.froze} payee{result.froze === 1 ? '' : 's'}, flagged {result.scams} scam{result.scams === 1 ? '' : 's'}.
+                </div>
+                <div className="mt-0.5 text-xs text-slate-400">
+                  {result.cautions > 0 ? `${result.cautions} more item${result.cautions === 1 ? '' : 's'} to double-check in the feed below.` : 'Everything flagged is now blocked — your agent will never pay those payees.'}
+                </div>
+              </div>
+            </div>
+          )}
+          {result?.error && <div className="mt-2 text-xs text-bad">Auto-pilot hit a snag — try again or use the feed below.</div>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ================================================================= PAGE ROOT */
 export default function AegisPage({ agentId, agent, customer: customerProp, agentName }) {
   const name = agentName || agent?.name || 'Aegis'
@@ -662,12 +786,21 @@ export default function AegisPage({ agentId, agent, customer: customerProp, agen
       if (state) setCustomer(state)
     } catch { /* ignore */ }
   }
+  // pull fresh account state (used after auto-pilot / deeper run so activity + frozen reflect it)
+  async function refreshCustomer() {
+    try {
+      const state = await api.getCustomer()
+      if (state) setCustomer(state)
+    } catch { /* ignore */ }
+  }
 
   const kpis = { flagged: (sweepCounts?.scam || 0) + (sweepCounts?.caution || 0), frozen: frozen.length }
 
   return (
     <div className="space-y-6">
       <TrustStrip agent={agent} customer={customer} kpis={kpis} />
+
+      <AutoPilot agentName={name} onFreeze={freeze} onDone={refreshCustomer} />
 
       <PostureBanner
         status={sweepStatus}
@@ -687,7 +820,7 @@ export default function AegisPage({ agentId, agent, customer: customerProp, agen
       <DeepScan onFreeze={freeze} frozenNames={frozenNames} seed={sweepSeed} />
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <InboxTriage agentName={name} />
+        <InboxTriage agentName={name} agentId={agentId} onDone={refreshCustomer} />
         <FreezeVault frozen={frozen} onFreeze={freeze} onUnfreeze={unfreeze} />
       </div>
 

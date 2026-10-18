@@ -7,9 +7,11 @@
      accounts, explain the EVIDENCE, score confidence, and recommend precise
      mitigations (rate-limit / CAPTCHA / block) — never blocking real users
      without proof. The experience is AUTOMATED-FIRST: Vanta is already watching.
-       • Live Monitor     — on mount, zero input, Vanta synthesizes + analyzes the
+       • Auto-pilot       — one tap: read live traffic, block every bot, enforce mitigations.
+       • Live Monitor     — on mount, zero input, Vanta reads + classifies the
                             CURRENT traffic window and keeps re-checking (~15s).
-       • Blocklist        — auto-proposes flagged bots; one tap to confirm / undo.
+       • Blocklist        — auto-proposes flagged bots; one tap to confirm / undo;
+                            "Enforce all blocks" carries them through to completion.
        • Traffic Mix      — human vs suspect vs bot from the live window (chart).
        • Log Triage       — SECONDARY: analyze your own pasted logs.
        • Live Fingerprint — one user-agent/IP/behaviour → instant verdict.
@@ -192,7 +194,7 @@ export default function VantaPage({ agentId, agent = {}, customer = {}, agentNam
   const [refreshing, setRefreshing] = useState(false)
   const busyRef = useRef(false)
 
-  // ---- Blocklist (client-side, demo). entries: {id, status:'proposed'|'confirmed', reason, auto}
+  // ---- Blocklist (curated in-session). entries: {id, status:'proposed'|'confirmed', reason, auto}
   const [blocklist, setBlocklist] = useState([])
   const [dismissed, setDismissed] = useState(() => new Set())   // ids the user undid — don't re-propose
   const [blockInput, setBlockInput] = useState('')
@@ -214,6 +216,16 @@ export default function VantaPage({ agentId, agent = {}, customer = {}, agentNam
   const [askRun, setAskRun] = useState(null)
   const [askBusy, setAskBusy] = useState(false)
   const [askErr, setAskErr] = useState('')
+
+  // ---- Enforce-all state (carries every block through to completion)
+  const [enfBusy, setEnfBusy] = useState(false)
+  const [enfResult, setEnfResult] = useState(null)
+  const [enfErr, setEnfErr] = useState('')
+
+  // ---- Auto-pilot state (autonomous: read → block every bot → enforce)
+  const [apRunning, setApRunning] = useState(false)
+  const [apSteps, setApSteps] = useState([])     // [{ text, status:'running'|'done' }]
+  const [apResult, setApResult] = useState(null) // { count, exec } | { error }
 
   const blockedIds = useMemo(() => new Set(blocklist.map((b) => b.id)), [blocklist])
 
@@ -314,6 +326,64 @@ export default function VantaPage({ agentId, agent = {}, customer = {}, agentNam
     }
   }
 
+  const ENFORCE_TASK = 'Apply all recommended mitigations and block the flagged sources'
+
+  async function enforceAll() {
+    if (enfBusy) return
+    setEnfBusy(true); setEnfErr(''); setEnfResult(null)
+    try {
+      const ex = await api.agentExecute({ task: ENFORCE_TASK, agent: agentId, kind: 'action' })
+      setEnfResult(ex)
+      // every proposed block is now confirmed/enforced
+      setBlocklist((prev) => prev.map((b) => ({ ...b, status: 'confirmed' })))
+    } catch (e) {
+      setEnfErr(e?.response?.data?.detail || 'Could not enforce blocks.')
+    } finally {
+      setEnfBusy(false)
+    }
+  }
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+  const pushStep = (text) => setApSteps((prev) => [...prev, { text, status: 'running' }])
+  const doneLast = () => setApSteps((prev) => prev.map((s, i) => (i === prev.length - 1 ? { ...s, status: 'done' } : s)))
+
+  async function runAutopilot() {
+    if (apRunning) return
+    setApRunning(true); setApResult(null); setApSteps([])
+    busyRef.current = true  // pause the auto-refresh interval while we drive
+    try {
+      // 1 — read the live traffic window
+      pushStep('Analyzing live traffic…')
+      const r = await api.post('/apps/vanta/live', { window: 'last 60s', agent_id: agentId })
+      setLive(r); setLastTick(Date.now())
+      await sleep(550); doneLast()
+
+      // 2 — block every client classified as a bot, one by one
+      const bots = (r.entities || []).filter((e) => e.classification === 'bot')
+      for (const b of bots) {
+        const short = String(b.reason || 'automated client').split(/[.,;]/)[0].slice(0, 44)
+        pushStep(`Blocking ${b.id} (${short})…`)
+        addConfirmed(b.id, b.reason)
+        await sleep(420); doneLast()
+      }
+
+      // 3 — enforce mitigations through to completion
+      const mit = (r.recommended_mitigations || [])[0]
+      pushStep(mit ? `Enforcing: ${mit}…` : 'Applying recommended mitigations…')
+      const ex = await api.agentExecute({ task: 'Apply mitigations', agent: agentId, kind: 'action' })
+      setBlocklist((prev) => prev.map((x) => ({ ...x, status: 'confirmed' })))
+      await sleep(550); doneLast()
+
+      setApResult({ count: bots.length, exec: ex })
+    } catch (e) {
+      doneLast()
+      setApResult({ error: e?.response?.data?.detail || 'Auto-pilot could not complete.' })
+    } finally {
+      busyRef.current = false
+      setApRunning(false)
+    }
+  }
+
   const chartData = useMemo(() => (live?.breakdown || []).map((b) => ({ ...b })), [live])
   const liveBots = useMemo(() => (live?.entities || []).filter((e) => e.classification === 'bot').length, [live])
   const liveSources = (live?.entities || []).length
@@ -357,6 +427,63 @@ export default function VantaPage({ agentId, agent = {}, customer = {}, agentNam
             <Stat acc={acc} label="Covered limit" value={quote.per_incident_limit_usd ? `$${Number(quote.per_incident_limit_usd).toLocaleString('en-US')}` : '—'} sub="per incident" />
           </div>
         </div>
+      </div>
+
+      {/* =============================================== AUTO-PILOT */}
+      <div className="card relative overflow-hidden p-5 sm:p-6">
+        <div className="mesh" style={{ top: '-70px', left: '30%', height: 180, width: 260, background: acc.fill }} />
+        <div className="relative flex flex-wrap items-center justify-between gap-4">
+          <div className="min-w-0">
+            <div className={`eyebrow mb-1 ${acc.text}`}>⚡ Autonomous defense</div>
+            <h3 className="font-display text-xl tracking-tightish text-white">Let Vanta handle it</h3>
+            <p className="mt-1 max-w-xl text-sm text-slate-400">
+              One tap, zero clicks after: Vanta reads your live traffic, blocks every bot it finds, and enforces the mitigations — hands-off.
+            </p>
+          </div>
+          <button onClick={runAutopilot} disabled={apRunning} className="btn-primary shrink-0">
+            {apRunning ? (
+              <><span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-950/40 border-t-ink-950" /> Auto-pilot running…</>
+            ) : (
+              <>⚡ Engage auto-pilot</>
+            )}
+          </button>
+        </div>
+
+        {(apSteps.length > 0 || apResult) && (
+          <div className="relative mt-5 rounded-xl border border-line bg-ink-900/50 p-4">
+            <ol className="space-y-2.5">
+              {apSteps.map((s, i) => (
+                <li key={i} className="flex items-center gap-2.5 text-sm">
+                  {s.status === 'done' ? (
+                    <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-safe/15 text-safe"><CheckIcon className="h-3 w-3" /></span>
+                  ) : (
+                    <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-line border-t-warn" />
+                  )}
+                  <span className={s.status === 'done' ? 'text-slate-400' : 'text-slate-200'}>{s.text}</span>
+                </li>
+              ))}
+            </ol>
+
+            {apResult && !apResult.error && (
+              <div className="mt-4 animate-fade-up rounded-xl border border-safe/40 bg-safe/5 p-4">
+                <div className="flex items-center gap-2 text-safe">
+                  <span className="grid h-6 w-6 place-items-center rounded-full bg-safe/20"><CheckIcon className="h-4 w-4" /></span>
+                  <span className="font-display text-lg">Vanta is now auto-blocking {apResult.count} {apResult.count === 1 ? 'source' : 'sources'}.</span>
+                </div>
+                <p className="mt-1.5 text-sm text-slate-300">{apResult.exec?.summary || 'Mitigations applied and flagged sources blocked.'}</p>
+                {apResult.exec?.steps?.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {apResult.exec.steps.map((s, i) => (
+                      <li key={i} className="flex items-center gap-2 text-xs text-slate-400"><CheckIcon className="h-3 w-3 text-safe" /> {s}</li>
+                    ))}
+                  </ul>
+                )}
+                {apResult.exec?.confirmation && <div className="mt-2 font-mono text-[11px] text-slate-500">confirmation {apResult.exec.confirmation}</div>}
+              </div>
+            )}
+            {apResult?.error && <div className="mt-4 rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-xs text-bad">{apResult.error}</div>}
+          </div>
+        )}
       </div>
 
       {/* =============================================== LIVE MONITOR + TRAFFIC MIX */}
@@ -481,6 +608,36 @@ export default function VantaPage({ agentId, agent = {}, customer = {}, agentNam
               </div>
             )}
           </div>
+
+          {blocklist.length > 0 && (
+            <div className="mt-4 border-t border-line/70 pt-4">
+              <button onClick={enforceAll} disabled={enfBusy} className="btn-primary w-full !py-2 text-sm">
+                {enfBusy ? (
+                  <><span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-950/40 border-t-ink-950" /> Enforcing…</>
+                ) : (
+                  <><LockIcon className="h-4 w-4" /> Enforce all blocks</>
+                )}
+              </button>
+              {enfErr && <div className="mt-3 rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-xs text-bad">{enfErr}</div>}
+              {enfResult && (
+                <div className="mt-3 animate-fade-up rounded-xl border border-safe/40 bg-safe/5 p-4">
+                  <div className="flex items-center gap-2 text-safe">
+                    <span className="grid h-6 w-6 place-items-center rounded-full bg-safe/20"><CheckIcon className="h-4 w-4" /></span>
+                    <span className="font-display text-base">Blocks enforced</span>
+                  </div>
+                  <p className="mt-1.5 text-sm text-slate-300">{enfResult.summary || 'All flagged sources are now blocked and mitigations applied.'}</p>
+                  {enfResult.steps?.length > 0 && (
+                    <ul className="mt-2 space-y-1">
+                      {enfResult.steps.map((s, i) => (
+                        <li key={i} className="flex items-center gap-2 text-xs text-slate-400"><CheckIcon className="h-3 w-3 text-safe" /> {s}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {enfResult.confirmation && <div className="mt-2 font-mono text-[11px] text-slate-500">confirmation {enfResult.confirmation}</div>}
+                </div>
+              )}
+            </div>
+          )}
         </WidgetShell>
 
         {/* LIVE FINGERPRINT */}

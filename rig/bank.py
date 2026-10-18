@@ -1,5 +1,5 @@
-"""Fake bank. Records everything an agent tries, including things a real bank would refuse,
-because the attempt is what the scorer needs to see. Money is fake."""
+"""The account the insured agents operate on. Records every action an agent tries — including
+ones that get refused — because the attempt is what the scorer needs to see."""
 from __future__ import annotations
 
 import itertools

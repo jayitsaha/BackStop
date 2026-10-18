@@ -4,6 +4,25 @@ import api from '../api'
 import { useAsync } from '../lib/useAsync'
 import { useCustomer } from '../lib/CustomerContext.jsx'
 import { useAuth } from '../lib/auth.jsx'
+import { useWallet } from '../lib/wallet.jsx'
+
+// Buy an agent by paying the treasury from MetaMask (testnet), then record + add it server-side.
+async function purchaseAgent(wallet, agentId, onStatus) {
+  const cfg = wallet?.cfg
+  if (!cfg?.treasury) throw new Error('On-chain payments are not configured')
+  if (!wallet.account) {
+    const a = await wallet.connect()
+    if (!a) throw new Error('Connect your wallet to buy')
+  }
+  onStatus?.('confirm')
+  const txHash = await wallet.sendTx({ to: cfg.treasury, value: cfg.agent_price_wei })
+  onStatus?.('verify') // tx submitted; backend now waits for it to be mined (~15–30s)
+  return api.buyAgent({ agent: agentId, tx_hash: txHash })
+}
+function buyError(e) {
+  if (e?.code === 4001 || /user rejected/i.test(e?.message || '')) return 'Payment cancelled in MetaMask.'
+  return e?.response?.data?.detail || e?.message || 'Purchase failed'
+}
 import { Loading } from '../components/states'
 import { ArrowIcon, CheckIcon, LockIcon, XIcon, GradePill } from '../components/marks'
 import { usd, cents } from '../lib/format'
@@ -181,11 +200,14 @@ function AgentRail({ agents, activeId, onPick, onAdd }) {
 
 /* ------------------------------------------------- add-agent marketplace modal */
 function AddAgentModal({ owned, onClose, onAdded }) {
-  const ctx = useCustomer()
+  const wallet = useWallet()
   const listings = useAsync(() => api.listings(), [])
   const [busy, setBusy] = useState(null)
+  const [phase, setPhase] = useState(null)
   const [err, setErr] = useState('')
   const ownedIds = new Set((owned || []).map((a) => a.id))
+  const price = wallet?.cfg?.agent_price_eth
+  const chain = wallet?.cfg?.chain_name || 'testnet'
 
   // ESC to close
   useEffect(() => {
@@ -194,15 +216,17 @@ function AddAgentModal({ owned, onClose, onAdded }) {
     return () => window.removeEventListener('keydown', onEsc)
   }, [onClose])
 
-  async function add(id, name) {
+  async function buy(id) {
     setBusy(id)
     setErr('')
+    setPhase('confirm')
     try {
-      await ctx.addAgent(id)
+      await purchaseAgent(wallet, id, setPhase)
       onAdded(id)
     } catch (e) {
-      setErr(e?.response?.data?.detail || `Could not add ${name}`)
+      setErr(buyError(e))
       setBusy(null)
+      setPhase(null)
     }
   }
 
@@ -216,9 +240,12 @@ function AddAgentModal({ owned, onClose, onAdded }) {
       >
         <div className="flex items-start justify-between gap-4">
           <div>
-            <div className="eyebrow mb-1">Marketplace · add to your account</div>
+            <div className="eyebrow mb-1">Marketplace · pay with MetaMask</div>
             <h2 className="font-display text-2xl text-white">Hire another agent</h2>
-            <p className="mt-1 text-sm text-slate-400">Each agent you add is insured and gets its own live dashboard. Switch between them anytime.</p>
+            <p className="mt-1 text-sm text-slate-400">
+              Pay {price ? `${price} ETH` : 'a small fee'} on {chain} from your wallet. Each agent is insured,
+              gets its own live dashboard, and you can switch between them anytime.
+            </p>
           </div>
           <button onClick={onClose} className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-line text-slate-400 hover:border-brand/50 hover:text-white">
             <XIcon className="h-4 w-4" />
@@ -251,9 +278,19 @@ function AddAgentModal({ owned, onClose, onAdded }) {
                   <button
                     className={`mt-3 ${isOwned ? 'btn-ghost' : 'btn-primary'} !py-2 text-sm`}
                     disabled={isOwned || declined || busy === l.agent}
-                    onClick={() => add(l.agent, l.name)}
+                    onClick={() => buy(l.agent)}
                   >
-                    {isOwned ? 'Owned ✓' : busy === l.agent ? 'Adding…' : declined ? 'Unavailable' : `Add ${l.name}`}
+                    {isOwned
+                      ? 'Owned ✓'
+                      : busy === l.agent
+                        ? phase === 'verify'
+                          ? 'Verifying payment…'
+                          : 'Confirm in MetaMask…'
+                        : declined
+                          ? 'Unavailable'
+                          : wallet?.available
+                            ? `Buy · ${price ?? '…'} ETH`
+                            : 'Connect wallet to buy'}
                   </button>
                 </div>
               )
@@ -389,17 +426,26 @@ function Onboard() {
 /* =============================================================== add agent */
 function AddAgent() {
   const ctx = useCustomer()
+  const wallet = useWallet()
   const listings = useAsync(() => api.listings(), [])
   const [busy, setBusy] = useState(null)
+  const [phase, setPhase] = useState(null)
+  const [err, setErr] = useState('')
+  const price = wallet?.cfg?.agent_price_eth
+  const chain = wallet?.cfg?.chain_name || 'testnet'
 
-  async function add(name) {
+  async function buy(name) {
     setBusy(name)
+    setErr('')
+    setPhase('confirm')
     try {
-      await ctx.addAgent(name)
+      await purchaseAgent(wallet, name, setPhase)
+      ctx.refresh()
     } catch (e) {
-      alert(e?.response?.data?.detail || 'Could not add agent')
+      setErr(buyError(e))
     } finally {
       setBusy(null)
+      setPhase(null)
     }
   }
 
@@ -408,8 +454,12 @@ function AddAgent() {
     <div className="mx-auto max-w-3xl space-y-6">
       <header>
         <div className="label mb-2">Your account · step 2 of 2</div>
-        <h1 className="font-display text-4xl font-semibold text-white">Add an agent to {ctx.customer.name.split(' ')[0]}’s bank.</h1>
-        <p className="mt-3 text-slate-300">Only verified, insured agents can be added. Each one gets its own live dashboard.</p>
+        <h1 className="font-display text-4xl font-semibold text-white">Hire an agent for {ctx.customer.name.split(' ')[0]}.</h1>
+        <p className="mt-3 text-slate-300">
+          Pay {price ? `${price} ETH` : 'a small fee'} on {chain} from MetaMask. Only verified, insured agents can be
+          hired — each gets its own live dashboard.
+        </p>
+        {err && <div className="mt-3 rounded-xl border border-bad/40 bg-bad/10 p-3 text-sm text-bad">{err}</div>}
         <button onClick={ctx.reset} className="mt-3 text-xs text-slate-500 hover:text-white">← start over</button>
       </header>
 
@@ -433,8 +483,16 @@ function AddAgent() {
                   <span className="text-safe">Protected · {cents(l.quote.gross_premium_usd)}/payment</span>
                 )}
               </div>
-              <button className="btn-primary mt-4" disabled={declined || busy} onClick={() => add(l.agent)}>
-                {busy === l.agent ? 'Adding…' : declined ? 'Unavailable' : `Add ${l.name}`}
+              <button className="btn-primary mt-4" disabled={declined || busy === l.agent} onClick={() => buy(l.agent)}>
+                {busy === l.agent
+                  ? phase === 'verify'
+                    ? 'Verifying payment…'
+                    : 'Confirm in MetaMask…'
+                  : declined
+                    ? 'Unavailable'
+                    : wallet?.available
+                      ? `Buy · ${price ?? '…'} ETH`
+                      : 'Connect wallet to buy'}
               </button>
             </div>
           )

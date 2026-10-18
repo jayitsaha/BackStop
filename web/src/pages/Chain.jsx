@@ -35,7 +35,21 @@ export default function Chain() {
   const [proofs, setProofs] = useState({}) // agent_id -> proof|'loading'
   const [anchoring, setAnchoring] = useState(false)
   const [onchaining, setOnchaining] = useState(false)
+  const [btcChecking, setBtcChecking] = useState(false)
   const [notice, setNotice] = useState('')
+
+  const checkBitcoin = () => {
+    setBtcChecking(true)
+    setNotice('')
+    api
+      .post('/chain/bitcoin-upgrade')
+      .then((r) => {
+        setNotice(r.status === 'confirmed' ? `Bitcoin confirmed in block #${r.bitcoin_block}.` : (r.detail || 'Still pending on Bitcoin — try again in a bit.'))
+        load()
+      })
+      .catch(() => setNotice('Could not reach the Bitcoin calendars.'))
+      .finally(() => setBtcChecking(false))
+  }
 
   const load = () => {
     setLoading(true)
@@ -96,7 +110,7 @@ export default function Chain() {
   const bitcoin = data?.bitcoin || {}
   const evm = data?.evm || {}
   const anchors = data?.anchors || []
-  const FAUCET = 'https://www.alchemy.com/faucets/base-sepolia'
+  const FAUCET = 'https://sepolia-faucet.pk910.de'
 
   const btcTone =
     bitcoin.status === 'pending'
@@ -145,7 +159,7 @@ export default function Chain() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="eyebrow mb-1 text-safe"><span className="h-2 w-2 rounded-full bg-safe" /> Real public blockchain</div>
-            <h3 className="font-display text-xl text-white">{evm.name || 'Base Sepolia'} · anyone can verify</h3>
+            <h3 className="font-display text-xl text-white">{evm.name || 'Sepolia testnet'} · anyone can verify</h3>
             <p className="mt-1 max-w-2xl text-sm text-slate-400">
               Each agent's fingerprint is committed inside a real transaction on a public EVM testnet. It's
               on a decentralized chain in seconds and clickable on the block explorer — no trust in our
@@ -168,7 +182,7 @@ export default function Chain() {
           ) : evm.configured ? (
             <>
               <span className="chip border-warn/30 bg-warn/10 text-warn">Wallet needs testnet funds</span>
-              <a href={FAUCET} target="_blank" rel="noreferrer" className="btn-ghost inline-flex items-center gap-1.5 text-sm">Open Base Sepolia faucet ↗</a>
+              <a href={FAUCET} target="_blank" rel="noreferrer" className="btn-ghost inline-flex items-center gap-1.5 text-sm">Open Sepolia PoW faucet ↗</a>
               <span className="text-xs text-slate-500">fund {short(evm.address, 8)}, then press Refresh</span>
             </>
           ) : (
@@ -181,6 +195,11 @@ export default function Chain() {
       <div className="card flex flex-wrap items-center justify-between gap-4 p-4">
         <div className="flex items-center gap-3">
           <span className={`chip ${btcTone}`}><LockIcon className="h-3.5 w-3.5" /> {btcLabel}</span>
+          {bitcoin.status !== 'confirmed' && (
+            <button onClick={checkBitcoin} disabled={btcChecking} className="btn-ghost !px-2.5 !py-1 text-xs">
+              {btcChecking ? 'Checking…' : 'Check Bitcoin'}
+            </button>
+          )}
           {bitcoin.detail ? <span className="hidden max-w-md text-xs text-slate-500 md:inline">{bitcoin.detail}</span> : null}
         </div>
         <div className="flex items-center gap-3">

@@ -78,11 +78,10 @@ def wander_propose(body: ProposeIn, authorization: str = Header(None)) -> dict[s
 
     system = _wander_prompt() + (
         "\n\nYou are powering the HOME of your dashboard. With little or NO input from the user, you "
-        "PROACTIVELY invent 2-3 complete, inspiring trip ideas you would genuinely recommend. This is a "
-        "demo — there is no live travel API, so make the trips coherent and clearly plausible, never "
-        "fabricated as real confirmed bookings. Apply your scam-awareness honestly: price each trip vs the "
-        "assumed budget, and if any component is a suspiciously cheap fare or a lookalike / unverified "
-        "reseller, flag its scam_risk. Speak in first person as the agent who found these.\n\n"
+        "PROACTIVELY surface 2-3 complete, inspiring trips you would genuinely recommend. Make each trip "
+        "coherent, specific and plausible. Apply your scam-awareness: price each trip vs the assumed "
+        "budget, and if any component is a suspiciously cheap fare or a lookalike / unverified reseller, "
+        "flag its scam_risk. Speak in first person as the agent who found these.\n\n"
         "Respond with ONLY a single valid JSON object of EXACTLY this shape:\n"
         '{"intro": string (1 sentence, first-person, e.g. "I scouted a few trips you might love"),'
         ' "trips": [ {'
@@ -95,8 +94,7 @@ def wander_propose(body: ProposeIn, authorization: str = Header(None)) -> dict[s
         ' "options": [ a FLIGHT then a HOTEL, each: {"type":"flight"|"hotel","title":string,"provider":string,'
         ' "price_usd":number,"itinerary":string,"fits_budget":boolean,"scam_risk":"none"|"low"|"high","notes":string} ]'
         ' } ] }\n'
-        "Make each trip distinct (different destinations/styles). Keep at least one trip comfortably within "
-        "budget. Be honest that these are illustrative ideas."
+        "Make each trip distinct (different destinations/styles). Keep at least one trip comfortably within budget."
     )
     user = (
         "Propose trips for me.\n"
@@ -163,15 +161,14 @@ def wander_search(body: SearchIn, authorization: str = Header(None)) -> dict[str
     query = (body.query or "").strip()
 
     system = _wander_prompt() + (
-        "\n\nYou are powering the SEARCH desk of your dashboard. Generate a realistic, HONEST set of "
-        "illustrative travel options (this is a demo — there is no live travel API, so make the options "
-        "coherent and clearly plausible, never fabricated as real bookings). If the user gave a free-text "
-        "request, PARSE the origin, destination, dates, traveler count and budget out of it yourself and "
-        "state what you understood in the summary (first person, e.g. \"I read that as…\"). Apply your "
-        "scam-awareness: if an option is unusually cheap vs the budget or comes from a lookalike / "
-        "unverified reseller, mark its scam_risk honestly. Respect the budget.\n\n"
+        "\n\nYou are powering the SEARCH desk of your dashboard. Return a set of specific, coherent, "
+        "plausible travel options. If the user gave a free-text request, PARSE the origin, destination, "
+        "dates, traveler count and budget out of it yourself and state what you understood in the summary "
+        "(first person, e.g. \"I read that as…\"). Apply your scam-awareness: if an option is unusually "
+        "cheap vs the budget or comes from a lookalike / unverified reseller, mark its scam_risk honestly. "
+        "Respect the budget.\n\n"
         "Respond with ONLY a single valid JSON object of EXACTLY this shape:\n"
-        '{"summary": string (1-2 sentences, first-person; restate the trip you understood; note it is illustrative),'
+        '{"summary": string (1-2 sentences, first-person; restate the trip you understood),'
         ' "within_budget": boolean,'
         ' "options": [ {"type": "flight"|"hotel"|"package", "title": string, "provider": string,'
         ' "price_usd": number (per person for flights, total-stay for hotels/packages),'
@@ -218,6 +215,7 @@ def wander_search(body: SearchIn, authorization: str = Header(None)) -> dict[str
 # ========================== /apps/wander/verify-booking ==========================
 class VerifyIn(BaseModel):
     text_or_link: str = ""
+    image: str = ""  # optional data URI of a screenshot — transcribed by a vision model
 
 
 @router.post("/apps/wander/verify-booking")
@@ -225,6 +223,23 @@ def wander_verify_booking(body: VerifyIn, authorization: str = Header(None)) -> 
     from api.main import current_user  # noqa: WPS433
     current_user(authorization)
     from agents.nim import ask_json
+
+    # If a screenshot was attached, transcribe it with the multimodal model and fold it into the text.
+    pasted = (body.text_or_link or "").strip()
+    transcribed = ""
+    if (body.image or "").strip():
+        try:
+            from agents.analyze import transcribe_image
+            transcribed = (transcribe_image(body.image.strip()) or "").strip()
+        except Exception as exc:  # pragma: no cover — never fail the whole verdict on OCR trouble
+            transcribed = f"[could not read the screenshot: {exc}]"
+
+    combined_parts = []
+    if pasted:
+        combined_parts.append(f"PASTED BY USER:\n{pasted}")
+    if transcribed:
+        combined_parts.append(f"TRANSCRIBED FROM SCREENSHOT:\n{transcribed}")
+    combined = "\n\n".join(combined_parts) or "(empty)"
 
     system = _wander_prompt() + (
         "\n\nYou are powering the VERIFY-BOOKING desk. The user pastes a booking confirmation email, a "
@@ -238,7 +253,7 @@ def wander_verify_booking(body: VerifyIn, authorization: str = Header(None)) -> 
         ' "reasons": [string] (3-6 concrete signals you observed, good or bad),'
         ' "advice": string (1-2 sentences: the single safest next step for the traveler)}'
     )
-    user = f"Verify this booking message / link:\n\n{(body.text_or_link or '').strip() or '(empty)'}"
+    user = f"Verify this booking message / link:\n\n{combined}"
 
     data = ask_json(system, user, max_tokens=900, temperature=0.2, default={
         "verdict": "caution", "reasons": ["Verifier temporarily unavailable."],

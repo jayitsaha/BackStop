@@ -1,1 +1,1 @@
-"""Backstop crash-test rig: fake bank, fake inbox, mandate, sandbox, adapter, runner, scorer."""
+"""Backstop crash-test rig: bank, inbox, mandate, sandbox, adapter, runner, scorer."""

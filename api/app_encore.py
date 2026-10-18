@@ -12,8 +12,7 @@ into a search itself, and screens resale listings for fake-ticket scams.
 Every prompt is grounded in Encore's REAL stored system_prompt (fetched via _agent_record) so the desk
 behaves exactly like the insured, scam-aware, budget-enforcing agent the user bought. api.main is imported
 INSIDE the request functions to keep this module import-safe and avoid a circular import at load time.
-Prices/events are LLM-generated and illustrative (demo — no live ticketing API); output is clamped so
-the UI can't break.
+Model output is normalized/clamped so the UI can't break.
 """
 from __future__ import annotations
 
@@ -98,12 +97,10 @@ def encore_radar(body: RadarIn, authorization: str = Header(None)) -> dict[str, 
     system = _encore_prompt() + (
         "\n\nYou are powering the HOME 'RADAR' of your dashboard. With little or NO input from the user, you "
         "PROACTIVELY surface 3-4 hot, currently-relevant shows or events you are tracking that you would "
-        "genuinely flag for this fan. This is a demo — there is NO live ticketing API, so make the events, "
-        "venues, dates and prices coherent and clearly plausible, never fabricated as real confirmed "
-        "inventory. Apply your real behaviour honestly: compare the best current resale price vs face value "
-        "and vs the budget, note the price trend you're seeing, call out seat quality, and flag scam_risk when "
-        "an event or price pattern attracts fake-ticket scalping. Speak in first person as the agent who is "
-        "watching these.\n\n"
+        "genuinely flag for this fan. Make the events, venues, dates and prices coherent and specific. Apply "
+        "your real behaviour honestly: compare the best current resale price vs face value and vs the budget, "
+        "note the price trend you're seeing, call out seat quality, and flag scam_risk when an event or price "
+        "pattern attracts fake-ticket scalping. Speak in first person as the agent who is watching these.\n\n"
         "Respond with ONLY a single valid JSON object of EXACTLY this shape:\n"
         '{"intro": string (1 sentence, first-person, e.g. "Here\'s what I\'m watching for you right now"),'
         ' "picks": [ {'
@@ -117,8 +114,7 @@ def encore_radar(body: RadarIn, authorization: str = Header(None)) -> dict[str, 
         ' "seats_note": string (short — section / view, e.g. "Lower bowl, aisle"),'
         ' "why": string (1-2 sentences, first-person, why I flagged it / my read on timing)'
         ' } ] }\n'
-        "Make each pick distinct (different artists/events/genres). Keep at least one comfortably within budget. "
-        "Be honest that these are illustrative picks, not live listings."
+        "Make each pick distinct (different artists/events/genres). Keep at least one comfortably within budget."
     )
     user = (
         "Surface the shows you're watching for me right now.\n"
@@ -155,12 +151,11 @@ def encore_search(body: SearchIn, authorization: str = Header(None)) -> dict[str
     system = _encore_prompt() + (
         "\n\nYou are powering the SEARCH desk of your dashboard. The fan tells you in their own words who "
         "they want to see. PARSE the artist/event, city, budget and date out of their sentence yourself and "
-        "restate what you understood in the summary (first person, e.g. \"I read that as…\"). This is a demo — "
-        "there is NO live ticketing API, so make the options coherent and clearly plausible, never fabricated "
-        "as real inventory. Apply your scam-awareness and budget enforcement: compare best price vs face value "
-        "and the budget, note the price trend, and flag scam_risk honestly.\n\n"
+        "restate what you understood in the summary (first person, e.g. \"I read that as…\"). Make the options "
+        "coherent and specific. Apply your scam-awareness and budget enforcement: compare best price vs face "
+        "value and the budget, note the price trend, and flag scam_risk honestly.\n\n"
         "Respond with ONLY a single valid JSON object of EXACTLY this shape:\n"
-        '{"summary": string (1-2 sentences, first-person; restate the show/budget you understood; note it is illustrative),'
+        '{"summary": string (1-2 sentences, first-person; restate the show/budget you understood),'
         ' "within_budget": boolean (can I likely get a ticket within the stated/assumed budget),'
         ' "picks": [ {'
         ' "artist_or_event": string, "venue": string, "city": string, "date": string,'

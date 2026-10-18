@@ -3,7 +3,7 @@
 Instead of only running canned crash-tests, the user can paste a REAL email/bill (or upload a screenshot)
 and get a live analysis: a multimodal model transcribes an image, then a model reasons over the content
 against the user's mandate and returns a structured verdict — is it a scam, what would the agent do, and
-would Backstop cover a mistake. No real money moves; the analysis itself is the value (fraud triage).
+would Backstop cover a mistake. The analysis itself is the value (fraud triage).
 """
 from __future__ import annotations
 
@@ -31,19 +31,52 @@ ANALYZE_SYS = (
 )
 
 
+def _shrink_data_uri(data_uri: str, max_dim: int = 950, quality: int = 74) -> str:
+    """Downscale + JPEG-compress a screenshot so the vision model reads it quickly. A full-res 2x PNG can be
+    hundreds of KB and makes the model hang; a ~1100px JPEG keeps the text legible and responds fast.
+    Falls back to the original data URI if anything goes wrong."""
+    try:
+        import base64
+        import io
+        from PIL import Image
+        b64 = data_uri.split(",", 1)[1] if "," in data_uri else data_uri
+        im = Image.open(io.BytesIO(base64.b64decode(b64))).convert("RGB")
+        w, h = im.size
+        scale = min(1.0, max_dim / float(max(w, h)))
+        if scale < 1.0:
+            im = im.resize((max(1, int(w * scale)), max(1, int(h * scale))))
+        out = io.BytesIO()
+        im.save(out, format="JPEG", quality=quality)
+        return "data:image/jpeg;base64," + base64.b64encode(out.getvalue()).decode()
+    except Exception:
+        return data_uri
+
+
 def transcribe_image(data_uri: str, model: str | None = None) -> str:
-    """Use a multimodal model to read a bill/email screenshot into text (+ obvious visual red flags)."""
-    client = _client()
-    r = client.chat.completions.create(
-        model=model or VISION_MODEL, max_tokens=500, temperature=0,
-        messages=[{"role": "user", "content": [
-            {"type": "text", "text": "Transcribe ALL text in this image exactly (sender, subject, body, amounts, "
-             "account numbers, and any links/URLs). Then add a line 'VISUAL NOTES:' with anything that looks "
-             "spoofed or off (lookalike logos, odd domains, mismatched sender)."},
-            {"type": "image_url", "image_url": {"url": data_uri}},
-        ]}],
-    )
-    return r.choices[0].message.content or ""
+    """Read a bill/email/booking screenshot into text (+ obvious visual red flags) with a multimodal model.
+    Downscales the image first so the model responds quickly, and bounds the call with a timeout instead of
+    hanging. Raises on genuine failure so the caller can fall back cleanly."""
+    img = _shrink_data_uri(data_uri)
+    prompt = ("Transcribe ALL text in this image exactly (sender, subject, body, amounts, account numbers, "
+              "dates, confirmation numbers, and any links/URLs). Then add a line 'VISUAL NOTES:' with anything "
+              "that looks spoofed or off (lookalike logos, odd/http domains, 'not secure' warnings, mismatched "
+              "sender, urgency/countdown, bank-transfer-to-a-person).")
+    messages = [{"role": "user", "content": [
+        {"type": "text", "text": prompt},
+        {"type": "image_url", "image_url": {"url": img}},
+    ]}]
+    last = None
+    for attempt in range(2):  # one retry on a transient error/timeout
+        try:
+            r = _client().with_options(timeout=48.0).chat.completions.create(
+                model=model or VISION_MODEL, max_tokens=600, temperature=0, messages=messages)
+            txt = (r.choices[0].message.content or "").strip()
+            if txt:
+                return txt
+        except Exception as e:
+            last = e
+            continue
+    raise RuntimeError(f"vision model could not read the image ({type(last).__name__ if last else 'empty response'})")
 
 
 def _parse_json(txt: str) -> dict:

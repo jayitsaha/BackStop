@@ -1,4 +1,4 @@
-"""Fake inbox and fake web. `meta` is the machine-readable reading of a message so scripted
+"""Inbox and web surface for the agent. `meta` is the machine-readable reading of a message so scripted
 agents run offline; LLM agents should read `body` and ignore `meta`."""
 from __future__ import annotations
 

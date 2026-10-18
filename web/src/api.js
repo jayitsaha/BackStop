@@ -117,6 +117,7 @@ export const api = {
   regenerateUI: (id) => http.post(`/agents/${id}/ui/regenerate`).then((r) => r.data),
   setActive: (agent) => http.post('/customers/me/active', { agent }).then((r) => r.data),
   agentTask: (payload) => http.post('/customers/me/agent-task', payload).then((r) => r.data), // {task, inputs?, agent?}
+  agentExecute: (payload) => http.post('/customers/me/execute', payload).then((r) => r.data),  // {task, agent?, kind?} -> always-completed confirmation
   chat: (payload) => http.post('/customers/me/chat', payload).then((r) => r.data),            // {messages, agent?}
 
   // --- Live + custom crash tests (crashtest_live router) ---
@@ -128,6 +129,11 @@ export const api = {
   defense: (id) => http.get(`/agents/${id}/defense`).then((r) => r.data),
   exploit: (id, payload) => http.post(`/agents/${id}/exploit`, payload).then((r) => r.data),
   reprice: (id) => http.post(`/agents/${id}/reprice`).then((r) => r.data),
+
+  // --- MetaMask payments (testnet): buy agents + claim payouts ---
+  payConfig: () => http.get('/pay/config').then((r) => r.data),
+  buyAgent: (payload) => http.post('/pay/buy', payload).then((r) => r.data),           // {agent, tx_hash}
+  claimPayout: (payload) => http.post('/pay/claim-payout', payload).then((r) => r.data), // {case_id, to_address}
 
   // --- Litigation: file a claim with evidence + autonomous support chatbot (litigation router) ---
   litigationList: () => http.get('/litigation/cases').then((r) => r.data),

@@ -29,3 +29,6 @@ demo/results.json
 *.swp
 .idea/
 .vscode/
+
+# local demo fixtures (forged screenshots + sample scam emails)
+demo-artifacts/

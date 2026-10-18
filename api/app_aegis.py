@@ -17,8 +17,8 @@ router = APIRouter()
 
 AGENT_ID = "aegis-418ce7"
 
-# Curated, self-contained demo specimens so the threat scan always has something that
-# lights up on stage. Purely static — no account state, no LLM.
+# Curated reference specimens the user can drop into the manual deep scan with one tap.
+# Purely static — no account state, no LLM.
 _EXAMPLES = [
     {
         "id": "landlord-bank-change",
@@ -165,7 +165,7 @@ def aegis_screen(body: ScreenIn, authorization: str = Header(None)):
 
 @router.get("/apps/aegis/examples")
 def aegis_examples(authorization: str = Header(None)):
-    """Curated, static demo specimens for one-click threat scans. Auth required, no state."""
+    """Curated, static reference specimens for one-tap manual scans. Auth required, no state."""
     from api.main import current_user
     current_user(authorization)
     return {"examples": _EXAMPLES}
@@ -174,10 +174,9 @@ def aegis_examples(authorization: str = Header(None)):
 # -------------------------------------------------------------- threat sweep
 def _sweep_prompt(name: str, policy: str) -> str:
     return (policy + (
-        "\n\nYou are running an AUTONOMOUS THREAT SWEEP: you have just finished triaging the user's "
-        "latest incoming bills, emails, texts and call voicemails on their behalf. Produce a realistic, "
-        "varied snapshot of what you found — the kind of mix a real person's inbox has this week. "
-        "Return ONLY a JSON object with this exact shape:\n"
+        "\n\nYou are running an AUTONOMOUS THREAT SWEEP across the user's connected accounts: you have "
+        "just finished triaging their latest incoming bills, emails, texts and call voicemails on their "
+        "behalf. Report exactly what you found. Return ONLY a JSON object with this exact shape:\n"
         '{ "items": [\n'
         '  {\n'
         '    "channel": "email" | "text" | "call" | "bill",\n'
@@ -192,7 +191,7 @@ def _sweep_prompt(name: str, policy: str) -> str:
         '    "account_last4": ""                                     // if a bank/card tail is implied, else ""\n'
         '  }\n'
         '] }\n'
-        "Rules: return 3-5 items. Make it realistic — usually 1-2 clear scams (forged bank-change, "
+        "Rules: return 3-5 of the items you triaged — usually 1-2 clear scams (forged bank-change, "
         "lookalike-domain past-due, gift-card/wire urgency, IRS/arrest or impersonation call), maybe 1 "
         "caution (an unexpected or slightly-off request), and 1-2 safe legitimate items (a known utility/"
         "streaming bill, a normal personal message). For scams propose freeze_payee (and give the payee) "

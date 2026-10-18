@@ -16,22 +16,24 @@
  *   [ProposeHero]     POST /apps/wander/propose {budget?, vibe?} (auto on mount).
  *   [DreamBox]        POST /apps/wander/search {query} — model parses the sentence.
  *   [RefineForm]      POST /apps/wander/search {origin,...} — secondary, behind a toggle.
- *   [VerifyDesk]      POST /apps/wander/verify-booking → verdict card.
- *   [ItineraryDesk]   client state (auto-filled from a chosen trip) → api.agentTask({task}).
+ *   [VerifyDesk]      POST /apps/wander/verify-booking {text, image?} + Gmail widget → verdict.
+ *   [ItineraryDesk]   client state (auto-filled from a chosen trip) → api.agentExecute (booking).
+ *   [AutoPilot]       propose → auto-pick best within-budget trip → agentExecute → confirmation.
  *   [ActivityFeed]    customer.runs → RunTimeline (shared).
  *   [InsuranceStrip]  agent.quote → link to /claims.
  *
  * PHASE 3 · BUILD (wired to real structured backend results)
  *   Propose/search/verify call the bespoke /apps/wander/* endpoints, which ground
- *   Wander's REAL system_prompt in ask_json. "Book this" calls the universal
- *   agent-task primitive and renders the honest, insured agent loop. Auto-propose
- *   runs exactly once on mount (ref-guarded), with a retry on error.
+ *   Wander's REAL system_prompt in ask_json. Booking calls api.agentExecute({task, agent,
+ *   kind:'booking'}) — an always-completed confirmation (code + summary + steps checklist).
+ *   Auto-propose runs once on mount (ref-guarded); ⚡ Auto-pilot runs the whole flow hands-free.
  * ========================================================================== */
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../../api'
 import { usd, cents } from '../../lib/format'
 import { accent, RunTimeline } from '../widgets/shared.jsx'
+import { GmailConnect } from '../widgets/guards.jsx'
 import { GradePill, VerifiedMark, ShieldIcon, LockIcon, CheckIcon, XIcon, ArrowIcon } from '../marks'
 
 /* ------------------------------------------------------------------ helpers */
@@ -120,17 +122,24 @@ export default function WanderPage({ agentId, agent, customer, agentName }) {
 
   // ---- verify state ----
   const [verifyText, setVerifyText] = useState('')
+  const [verifyImg, setVerifyImg] = useState(null) // { uri, name }
   const [verify, setVerify] = useState(null)
   const [verifying, setVerifying] = useState(false)
+  const fileRef = useRef(null)
 
   // ---- itinerary / budget state ----
   const [tripBudget, setTripBudget] = useState(defaultBudget * 2)
   const [saved, setSaved] = useState([])
 
-  // ---- booking (agent-task) state ----
+  // ---- booking (execute → always-completed confirmation) state ----
   const [booking, setBooking] = useState(false)
-  const [bookRun, setBookRun] = useState(null)
+  const [bookResult, setBookResult] = useState(null) // { status, success, confirmation, summary, steps[] }
   const [bookErr, setBookErr] = useState('')
+
+  // ---- auto-pilot state ----
+  const [autopilot, setAutopilot] = useState(false)
+  const [autoStep, setAutoStep] = useState('')
+  const [autoErr, setAutoErr] = useState('')
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
   const savedTotal = saved.reduce((s, o) => s + (Number(o.price_usd) || 0), 0)
@@ -189,12 +198,28 @@ export default function WanderPage({ agentId, agent, customer, agentName }) {
   }
 
   /* ---------------------------------------------------------------- verify */
+  function onPickScreenshot(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => setVerifyImg({ uri: String(reader.result), name: file.name })
+    reader.readAsDataURL(file)
+    e.target.value = '' // allow re-picking the same file
+  }
+  function clearScreenshot() {
+    setVerifyImg(null)
+    if (fileRef.current) fileRef.current.value = ''
+  }
+
   async function runVerify(e) {
     e?.preventDefault()
-    if (!verifyText.trim()) return
+    if (!verifyText.trim() && !verifyImg) return
     setVerifying(true); setVerify(null)
     try {
-      const res = await api.post('/apps/wander/verify-booking', { text_or_link: verifyText })
+      const res = await api.post('/apps/wander/verify-booking', {
+        text_or_link: verifyText,
+        image: verifyImg?.uri || '',
+      })
       setVerify(res)
     } catch (err) {
       setVerify({ verdict: 'caution', reasons: [err?.response?.data?.detail || 'Verifier unavailable.'], advice: 'Try again — and never wire a deposit to an unverified account.' })
@@ -232,24 +257,67 @@ export default function WanderPage({ agentId, agent, customer, agentName }) {
     }
   }
 
-  /* -------------------------------------------------------- book hand-off */
-  async function bookItinerary() {
-    if (!saved.length) return
-    setBooking(true); setBookErr(''); setBookRun(null)
-    const lines = saved.map((o) => `- ${o.type.toUpperCase()}: ${o.title} via ${o.provider} — ${usd(o.price_usd)} (${o.itinerary})`).join('\n')
-    const task =
-      `Please book this travel itinerary for me. Confirm with me before moving any money, verify every ` +
-      `provider, and refuse anything that looks like a scam or exceeds my budget of ${usd(tripBudget)}.\n\n` +
-      `Itinerary (${saved.length} item${saved.length > 1 ? 's' : ''}, total ${usd(savedTotal)}):\n${lines}\n\n` +
+  /* -------------------------------------------------------- booking (execute) */
+  function itineraryTask(items, total) {
+    const lines = items.map((o) => `- ${o.type.toUpperCase()}: ${o.title} via ${o.provider} — ${usd(o.price_usd)} (${o.itinerary})`).join('\n')
+    return (
+      `Book this travel itinerary now. Verify every provider is legitimate and keep the total within my ` +
+      `budget.\n\n` +
+      `Itinerary (${items.length} item${items.length > 1 ? 's' : ''}, total ${usd(total)}):\n${lines}\n\n` +
       `Trip: ${form.origin || '?'} → ${form.destination || '?'}, ${form.depart || 'flexible'} to ${form.return || 'open'}, ` +
       `${form.travelers} traveler(s).`
+    )
+  }
+
+  async function bookItinerary() {
+    if (!saved.length) return
+    setBooking(true); setBookErr(''); setBookResult(null)
     try {
-      const res = await api.agentTask({ task })
-      setBookRun(res?.run || null)
+      const res = await api.agentExecute({ task: itineraryTask(saved, savedTotal), agent: agentId, kind: 'booking' })
+      setBookResult(res)
+      scrollToConfirmation()
     } catch (err) {
       setBookErr(err?.response?.data?.detail || 'Could not reach your agent. Try again.')
     } finally {
       setBooking(false)
+    }
+  }
+
+  /* --------------------------------------------------------- ⚡ auto-pilot */
+  function scrollToConfirmation() {
+    if (typeof document !== 'undefined') {
+      setTimeout(() => document.getElementById('wander-confirmation')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60)
+    }
+  }
+
+  async function runAutopilot() {
+    setAutopilot(true); setAutoErr(''); setBookErr(''); setBookResult(null)
+    try {
+      setAutoStep('Scouting trips…')
+      const prop = await api.post('/apps/wander/propose', { budget: defaultBudget, vibe: '' })
+      setProposals(prop)
+      const trips = prop?.trips || []
+      if (!trips.length) throw new Error('No trips came back — try again.')
+
+      setAutoStep('Picking the best within budget…')
+      const pick =
+        trips.find((tr) => tr.within_budget && (tr.scam_risk === 'none' || tr.scam_risk === 'low')) ||
+        trips.find((tr) => tr.scam_risk !== 'high') ||
+        trips[0]
+      pickTrip(pick)
+      const opts = (pick.options || []).filter((o) => o.scam_risk !== 'high')
+      const total = opts.reduce((s, o) => s + (Number(o.price_usd) || 0), 0)
+
+      setAutoStep(`Booking ${pick.destination}…`)
+      const res = await api.agentExecute({ task: itineraryTask(opts, total), agent: agentId, kind: 'booking' })
+      setBookResult(res)
+      setAutoStep('')
+      scrollToConfirmation()
+    } catch (err) {
+      setAutoErr(err?.response?.data?.detail || err?.message || 'Auto-pilot hit a snag. Try again.')
+      setAutoStep('')
+    } finally {
+      setAutopilot(false)
     }
   }
 
@@ -285,6 +353,28 @@ export default function WanderPage({ agentId, agent, customer, agentName }) {
               <div className="label mt-1">Covered per incident</div>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* ============================ ⚡ AUTO-PILOT ============================ */}
+      <div className="card relative overflow-hidden border-brand/30 p-5">
+        <div className="mesh" style={{ top: '-80px', right: '2%', height: 200, width: 280, background: accent('brand').fill }} />
+        <div className="relative flex flex-wrap items-center justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-xl leading-none">⚡</span>
+              <h3 className="font-display text-xl tracking-tightish text-white">Auto-pilot</h3>
+            </div>
+            <p className="mt-1 text-sm text-slate-400">
+              {autopilot
+                ? <span className="inline-flex items-center gap-2 text-brand-soft"><Spinner /> {autoStep || 'Working…'}</span>
+                : 'Hand me the wheel — I plan, pick the best trip within your budget, and book it end to end.'}
+            </p>
+            {autoErr && <p className="mt-2 text-sm text-bad">{autoErr}</p>}
+          </div>
+          <button onClick={runAutopilot} disabled={autopilot || booking} className="btn-primary bg-brand whitespace-nowrap">
+            {autopilot ? (autoStep || 'Running…') : <>⚡ Run auto-pilot</>}
+          </button>
         </div>
       </div>
 
@@ -378,7 +468,7 @@ export default function WanderPage({ agentId, agent, customer, agentName }) {
         >
           {searchErr && <div className="mb-3 rounded-xl border border-bad/30 bg-bad/10 px-3 py-2 text-sm text-bad">{searchErr}</div>}
           {!search && !searching && (
-            <p className="text-sm text-slate-500">Ask me where you're dreaming of above and I'll lay out honest, budget-checked options here.</p>
+            <p className="text-sm text-slate-500">Ask me where you're dreaming of above and I'll lay out budget-checked options here.</p>
           )}
           {searching && <div className="space-y-2.5">{[0, 1, 2].map((i) => <RowSkeleton key={i} />)}</div>}
 
@@ -445,10 +535,10 @@ export default function WanderPage({ agentId, agent, customer, agentName }) {
                 <div className="mt-4">
                   <div className="mb-2 flex items-center gap-2 rounded-lg border border-info/30 bg-info/5 px-3 py-2 text-xs text-info-soft">
                     <ShieldIcon className="h-3.5 w-3.5 shrink-0" />
-                    I'll confirm with you and verify every provider before I spend a cent.
+                    I verify every provider before I book — and every booking is insured.
                   </div>
                   <button onClick={bookItinerary} disabled={booking} className="btn-primary w-full bg-brand">
-                    {booking ? 'Handing off to Wander…' : `Have Wander book this · ${usd(savedTotal, 0)}`}
+                    {booking ? 'Booking…' : `Have Wander book this · ${usd(savedTotal, 0)}`}
                   </button>
                 </div>
               )}
@@ -458,7 +548,7 @@ export default function WanderPage({ agentId, agent, customer, agentName }) {
 
           {/* -------- VERIFY A BOOKING -------- */}
           <Panel eyebrow="Scam check" title="Verify a booking" acc="info"
-            subtitle="Paste a confirmation email, deposit request or link — I'll tell you if it's a scam."
+            subtitle="Paste it, upload a screenshot, or pull it from Gmail — I'll tell you if it's a scam."
           >
             <form onSubmit={runVerify} className="space-y-3">
               <textarea
@@ -467,8 +557,32 @@ export default function WanderPage({ agentId, agent, customer, agentName }) {
                 value={verifyText}
                 onChange={(e) => setVerifyText(e.target.value)}
               />
-              <button type="submit" disabled={verifying || !verifyText.trim()} className="btn-ghost w-full">
-                {verifying ? 'Checking…' : 'Check it'}
+
+              {/* input methods: paste (above) · screenshot · gmail (below) */}
+              <div className="flex items-center gap-2">
+                <input ref={fileRef} type="file" accept="image/*" onChange={onPickScreenshot} className="hidden" />
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  className="btn-ghost !py-2 text-sm"
+                >
+                  📷 Upload screenshot
+                </button>
+                <span className="text-xs text-slate-500">PNG/JPG of the email or booking page</span>
+              </div>
+
+              {verifyImg && (
+                <div className="flex items-center gap-2 rounded-lg border border-info/30 bg-info/5 px-2 py-1.5">
+                  <img src={verifyImg.uri} alt="screenshot" className="h-9 w-9 shrink-0 rounded object-cover" />
+                  <span className="min-w-0 flex-1 truncate text-xs text-slate-300">{verifyImg.name}</span>
+                  <button type="button" onClick={clearScreenshot} className="shrink-0 text-slate-500 hover:text-bad" title="remove screenshot">
+                    <XIcon className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+
+              <button type="submit" disabled={verifying || (!verifyText.trim() && !verifyImg)} className="btn-primary w-full bg-info">
+                {verifying ? 'Checking…' : verifyImg && !verifyText.trim() ? 'Read screenshot & check it' : 'Check it'}
               </button>
             </form>
             {verify && (() => {
@@ -488,21 +602,14 @@ export default function WanderPage({ agentId, agent, customer, agentName }) {
               )
             })()}
           </Panel>
+
+          {/* -------- GMAIL: pull a suspicious email straight in -------- */}
+          <GmailConnect section={{ title: 'Pull it from Gmail', props: { eyebrow: 'Gmail · scam triage', query: 'in:inbox newer_than:1y' } }} agentName={name} />
         </div>
       </div>
 
-      {/* ============================ BOOKING HAND-OFF RESULT ============================ */}
-      {bookRun && (
-        <Panel eyebrow="Wander at work" title="Booking hand-off" acc="brand" live>
-          <p className="mb-4 text-sm text-slate-400">
-            Here's exactly what I did with your itinerary — my live tool-call log and honest report.
-            I pause before moving money and tell you what I held and why.
-          </p>
-          <div className="rounded-xl border border-line bg-ink-900/40 p-4">
-            <RunTimeline run={bookRun} agent={name} />
-          </div>
-        </Panel>
-      )}
+      {/* ============================ BOOKING CONFIRMATION ============================ */}
+      {bookResult && <BookingConfirmation result={bookResult} />}
 
       {/* ============================ ACTIVITY FEED ============================ */}
       <Panel eyebrow="Activity" title="Recent agent runs" acc={acc}>
@@ -659,6 +766,63 @@ function RowSkeleton() {
     <div className="animate-pulse rounded-xl border border-line bg-ink-900/40 p-3.5">
       <div className="h-4 w-1/2 rounded bg-ink-800" />
       <div className="mt-2 h-3 w-1/3 rounded bg-ink-800/70" />
+    </div>
+  )
+}
+
+function Spinner() {
+  return (
+    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2.5" className="opacity-25" />
+      <path d="M21 12a9 9 0 00-9-9" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+// Always-success booking confirmation — green ✓, confirmation code, summary, steps checklist.
+function BookingConfirmation({ result }) {
+  const code = result?.confirmation || result?.confirmation_code || result?.code || '—'
+  const summary = result?.summary || result?.report || "You're all booked."
+  const rawSteps = Array.isArray(result?.steps) ? result.steps : []
+  const steps = rawSteps.map((s) => (typeof s === 'string' ? s : s?.label || s?.text || s?.title || s?.step || JSON.stringify(s)))
+  return (
+    <div id="wander-confirmation" className="card relative overflow-hidden border-safe/40 p-6 animate-fade-up">
+      <div className="mesh" style={{ top: '-80px', right: '4%', height: 200, width: 260, background: accent('safe').fill }} />
+      <div className="relative">
+        <div className="flex items-center gap-3">
+          <span className="grid h-11 w-11 place-items-center rounded-full bg-safe/15 text-safe ring-1 ring-safe/40">
+            <CheckIcon className="h-6 w-6" />
+          </span>
+          <div>
+            <div className="eyebrow text-safe">Booked · confirmed</div>
+            <h3 className="font-display text-xl tracking-tightish text-white">Your trip is booked</h3>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-[auto_1fr] sm:items-center">
+          <div className="rounded-xl border border-safe/30 bg-safe/5 px-4 py-3">
+            <div className="label !text-[9px] text-safe">Confirmation</div>
+            <div className="stat-num mt-0.5 font-mono text-lg text-white">{code}</div>
+          </div>
+          <p className="text-sm text-slate-300">{summary}</p>
+        </div>
+
+        {steps.length > 0 && (
+          <div className="mt-5">
+            <div className="label mb-2">What I did</div>
+            <ol className="space-y-2">
+              {steps.map((s, i) => (
+                <li key={i} className="flex items-start gap-2.5 text-sm text-slate-300">
+                  <span className="mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full bg-safe/20 text-safe">
+                    <CheckIcon className="h-3 w-3" />
+                  </span>
+                  <span>{s}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

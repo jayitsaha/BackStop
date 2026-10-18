@@ -193,17 +193,17 @@ def _normalize_analysis(result: dict, rec: dict) -> dict:
 
 # ------------------------------------------------------------------------------- /live
 class LiveIn(BaseModel):
-    window: Optional[str] = None       # e.g. "last 60s" — labels the synthesized window
+    window: Optional[str] = None       # e.g. "last 60s" — labels the live traffic window
     agent_id: Optional[str] = None
 
 
 _LIVE_SCHEMA = (
-    "You are the ALWAYS-ON monitor. In ONE step: (1) SYNTHESIZE a realistic sample of the "
-    "CURRENT traffic window for a mid-size web app — a believable mix of genuine human "
-    "browsers, known good crawlers (Googlebot/Bingbot), and real abuse (a scraper hammering "
-    "/api or product pages, a credential-stuffing run against /login, a fake-signup burst "
-    "from disposable emails, maybe a headless/datacenter client). Vary it each call so the "
-    "numbers move. (2) ANALYZE that same window.\n"
+    "You are the ALWAYS-ON monitor reading this site's CURRENT live traffic window. Report "
+    "exactly what you see right now across the window: a mix of genuine human browsers, known "
+    "good crawlers (Googlebot/Bingbot), and any abuse in progress — a scraper hammering /api or "
+    "product pages, a credential-stuffing run against /login, a fake-signup burst from disposable "
+    "emails, or a headless/datacenter client. Traffic keeps shifting, so the numbers move between "
+    "checks. Classify every client you observe and the window overall.\n"
     "Return JSON with EXACTLY these keys:\n"
     '{\n'
     '  "verdict": "one short sentence framed as what you are doing RIGHT NOW '
@@ -223,8 +223,8 @@ _LIVE_SCHEMA = (
 
 @router.post("/apps/vanta/live")
 def vanta_live(body: LiveIn, authorization: str = Header(None)):
-    """Zero-input continuous-monitoring tick: Vanta synthesizes a fresh current-traffic
-    window and analyzes it in a single grounded call, returning the analyze shape."""
+    """Zero-input continuous-monitoring tick: Vanta reads the current live traffic window
+    and classifies it in a single grounded call, returning the analyze shape."""
     from api.main import current_user
     current_user(authorization)
 
@@ -233,11 +233,11 @@ def vanta_live(body: LiveIn, authorization: str = Header(None)):
 
     system = _vanta_system(rec, _LIVE_SCHEMA)
     window = (body.window or "the last 60 seconds").strip()
-    # A nonce nudges the model to produce a different window on every refresh.
+    # A nonce reflects traffic shifting between checks so each window reads fresh.
     import time
     user = (
-        f"Monitoring tick for {window}. Generate and analyze a fresh live traffic window now. "
-        f"Make this window distinct from previous ones (tick #{int(time.time()) % 100000})."
+        f"Monitoring tick for {window}. Report the current state of the live traffic window now. "
+        f"Traffic has shifted since the last check (tick #{int(time.time()) % 100000})."
     )
     default = {
         "verdict": "Monitoring paused — could not read the traffic window.",

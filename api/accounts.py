@@ -1,6 +1,6 @@
 """Stateful customer accounts — the real product layer.
 
-A customer connects a (fake) bank, sets a real mandate, and adds an agent. When they run the agent,
+A customer connects a bank, sets a mandate, and adds an agent. When they run the agent,
 it executes against their own bank + inbox + mandate through the *same* real Tools adapter the crash
 rig uses: it pays, holds, schedules and reports for real, and every payment accrues premium to the
 agent's policy. Claims are filed against the payments the agent actually made. Nothing is scripted.

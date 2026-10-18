@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import api from '../api'
-import { CheckIcon, XIcon, ShieldIcon } from '../components/marks'
+import { useWallet } from '../lib/wallet.jsx'
+import { CheckIcon, XIcon, ShieldIcon, ArrowIcon } from '../components/marks'
 
 // Litigation / claims desk: file a claim with evidence, then an autonomous support agent
 // cross-questions you to establish the scam genuinely happened via the agent you bought — and decides.
@@ -344,6 +345,11 @@ function CaseChat({ caseData, onUpdated }) {
       {/* verdict */}
       {decided && dec && <VerdictCard dec={dec} adjudication={caseData.adjudication} />}
 
+      {/* payout — approved claims can be settled on-chain to the user's wallet */}
+      {decided && dec && dec.outcome === 'approved' && (
+        <PayoutPanel caseData={caseData} onUpdated={onUpdated} />
+      )}
+
       {/* composer */}
       {!decided && (
         <div className="mt-4 border-t border-line pt-4">
@@ -391,6 +397,210 @@ function VerdictCard({ dec, adjudication }) {
         <div className="mt-3 rounded-lg border border-safe/30 bg-safe/5 px-3 py-2 text-xs text-safe">
           Logged against payment {adjudication.payment_id} — eligible for settlement.
         </div>
+      )}
+    </div>
+  )
+}
+
+// ----------------------------- payout to MetaMask -----------------------------
+const shortAddr = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '')
+
+// Scoped CSS for the "final whizz" celebration. Injected once; pure CSS, no deps.
+const WHIZZ_CSS = `
+@keyframes whizz-pop {
+  0% { transform: scale(0.3); opacity: 0; }
+  55% { transform: scale(1.18); opacity: 1; }
+  75% { transform: scale(0.94); }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes whizz-glow {
+  0% { box-shadow: 0 0 0 0 rgba(52,211,153,0.0), 0 0 0 0 rgba(234,179,8,0.0); }
+  40% { box-shadow: 0 0 28px 6px rgba(52,211,153,0.55), 0 0 60px 18px rgba(234,179,8,0.28); }
+  100% { box-shadow: 0 0 14px 2px rgba(52,211,153,0.28), 0 0 0 0 rgba(234,179,8,0.0); }
+}
+@keyframes whizz-ring {
+  0% { transform: scale(0.5); opacity: 0.7; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+@keyframes whizz-draw {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes whizz-ray {
+  0% { transform: rotate(var(--a)) translateY(0) scale(0.6); opacity: 0; }
+  25% { opacity: 1; }
+  100% { transform: rotate(var(--a)) translateY(calc(-1 * var(--d))) scale(1); opacity: 0; }
+}
+@keyframes whizz-rise {
+  0% { transform: translateY(8px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+.whizz-pop { animation: whizz-pop 0.6s cubic-bezier(0.22,1.4,0.42,1) both; }
+.whizz-glow { animation: whizz-glow 1.4s ease-out both; }
+.whizz-ring { animation: whizz-ring 0.9s ease-out both; }
+.whizz-check path { stroke-dasharray: 26; stroke-dashoffset: 26; animation: whizz-draw 0.5s 0.28s ease-out forwards; }
+.whizz-ray { animation: whizz-ray 0.85s ease-out both; }
+.whizz-rise { animation: whizz-rise 0.5s 0.35s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .whizz-pop, .whizz-glow, .whizz-ring, .whizz-ray, .whizz-rise { animation: none !important; opacity: 1 !important; transform: none !important; }
+  .whizz-check path { stroke-dashoffset: 0 !important; animation: none !important; }
+}
+`
+
+// 10 radiating confetti rays around the check badge — gold + green, classy burst.
+const RAYS = Array.from({ length: 10 }, (_, i) => ({
+  a: `${i * 36}deg`,
+  d: `${46 + (i % 3) * 10}px`,
+  color: i % 2 === 0 ? '#34d399' : '#eab308',
+  delay: `${(i % 5) * 0.03}s`,
+  size: i % 3 === 0 ? 8 : 6,
+}))
+
+function SettledCard({ payout, celebrate }) {
+  return (
+    <div className="relative mt-4 overflow-hidden rounded-2xl border border-safe/40 bg-gradient-to-br from-safe/10 via-safe/5 to-brand/10 p-5">
+      <style>{WHIZZ_CSS}</style>
+
+      <div className="flex items-start gap-4">
+        {/* animated check badge + burst */}
+        <div className="relative grid h-14 w-14 shrink-0 place-items-center">
+          {celebrate && (
+            <>
+              <span className="whizz-ring absolute inset-0 rounded-full border-2 border-safe/60" />
+              {RAYS.map((r, i) => (
+                <span
+                  key={i}
+                  className="whizz-ray absolute left-1/2 top-1/2 block rounded-full"
+                  style={{
+                    '--a': r.a,
+                    '--d': r.d,
+                    width: r.size,
+                    height: r.size,
+                    marginLeft: -r.size / 2,
+                    marginTop: -r.size / 2,
+                    background: r.color,
+                    animationDelay: r.delay,
+                  }}
+                />
+              ))}
+            </>
+          )}
+          <div className={`grid h-14 w-14 place-items-center rounded-full bg-safe/15 text-safe ring-1 ring-safe/40 ${celebrate ? 'whizz-pop whizz-glow' : ''}`}>
+            <CheckIcon className={`h-7 w-7 ${celebrate ? 'whizz-check' : ''}`} />
+          </div>
+        </div>
+
+        <div className={`min-w-0 flex-1 ${celebrate ? 'whizz-rise' : ''}`}>
+          <div className="flex items-center gap-2">
+            <h4 className="font-display text-lg text-white">Settlement paid</h4>
+            <span className="chip border-safe/30 bg-safe/10 text-safe !px-2 !py-0.5 text-[10px]">On-chain</span>
+          </div>
+          <p className="mt-1 text-sm text-slate-300">
+            Settled on-chain ·{' '}
+            <span className="font-mono text-safe">{payout.amount_eth} ETH</span>{' '}
+            → <span className="font-mono text-slate-200">{shortAddr(payout.to_address)}</span>
+          </p>
+          {payout.explorer_url && (
+            <a
+              href={payout.explorer_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-ghost mt-3 inline-flex items-center gap-1.5 text-sm"
+            >
+              View transaction <ArrowIcon className="h-4 w-4 -rotate-45" />
+            </a>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PayoutPanel({ caseData, onUpdated }) {
+  const { account, connect, connecting, available } = useWallet()
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const [celebrate, setCelebrate] = useState(false)
+
+  // Already settled (persists across reloads via the fetched case).
+  if (caseData.payout) {
+    return <SettledCard payout={caseData.payout} celebrate={celebrate} />
+  }
+
+  const claim = async () => {
+    setErr('')
+    setBusy(true)
+    try {
+      let to = account
+      if (!to) {
+        to = await connect() // prompts MetaMask
+        if (!to) {
+          setBusy(false)
+          return // user dismissed / no wallet
+        }
+      }
+      const res = await api.claimPayout({ case_id: caseData.case_id, to_address: to })
+      // Refresh the case so the payout persists on reload.
+      const fresh = await api.litigationCase(caseData.case_id).catch(() => null)
+      if (fresh && fresh.payout) {
+        setCelebrate(true)
+        onUpdated(fresh)
+      } else if (res?.payout) {
+        // Fallback: merge the payout into the current case if the refetch lagged.
+        setCelebrate(true)
+        onUpdated({ ...caseData, payout: res.payout })
+      }
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'Could not send the settlement. Please try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="mt-4 overflow-hidden rounded-2xl border border-safe/30 bg-gradient-to-br from-safe/5 to-brand/5 p-5">
+      <div className="flex items-start gap-3">
+        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-safe/15 text-safe ring-1 ring-safe/30">
+          <CheckIcon className="h-5 w-5" />
+        </div>
+        <div className="min-w-0">
+          <h4 className="font-display text-lg text-white">Your claim was approved</h4>
+          <p className="mt-0.5 text-sm text-slate-400">
+            Receive your settlement directly to your MetaMask wallet on Ethereum Sepolia.
+          </p>
+        </div>
+      </div>
+
+      {busy ? (
+        <div className="mt-4 flex items-center gap-3 rounded-xl border border-info/30 bg-info/5 px-4 py-3 text-sm text-info-soft">
+          <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-info-soft/40 border-t-info-soft" />
+          <span>
+            {connecting ? 'Waiting for MetaMask…' : 'Sending your settlement on-chain…'}
+            <span className="block text-xs text-slate-500">This can take around 15 seconds — please keep this tab open.</span>
+          </span>
+        </div>
+      ) : (
+        <button onClick={claim} className="btn-primary mt-4 w-full">
+          Receive payout to MetaMask
+        </button>
+      )}
+
+      {available === false && (
+        <p className="mt-2 text-center text-xs text-slate-500">
+          No wallet detected.{' '}
+          <a
+            href="https://metamask.io/download/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-brand underline underline-offset-2 hover:text-brand-soft"
+          >
+            Install MetaMask
+          </a>{' '}
+          to receive your payout.
+        </p>
+      )}
+
+      {err && (
+        <div className="mt-3 rounded-lg border border-bad/40 bg-bad/10 px-3 py-2 text-sm text-bad">{err}</div>
       )}
     </div>
   )

@@ -1,12 +1,9 @@
-"""Sage = your FinTech Academy agent, behind the Backstop tool API.
+"""Sage — Backstop's careful bill-paying agent, behind the Tools API.
 
-Until the real agent is wired, Sage delegates to SageReference so the whole pipeline runs.
-To wire the real one:
-  1. Feed `tools.read_inbox()` to your email parser / JEV classifier.
-  2. For every proposed payment call `tools.check_mandate(payee, amount, account_last4)`;
-     your rules engine decides, `tools.pay(...)` executes, `tools.message_user(...)` holds.
-  3. Never call add_payee / set_limit / update_mandate / send_p2p / update_payment_method.
-  4. End with `tools.report([...])` listing paid, held, failed, scheduled, cancelled, could_not_cancel.
+Sage reads the inbox, verifies every proposed payment against the mandate before moving money, and
+holds anything that doesn't check out. It never adds payees, changes limits, edits the mandate, sends
+P2P, or updates payment methods, and it ends every session with a report of what it paid, held, failed,
+scheduled or cancelled.
 """
 from __future__ import annotations
 
@@ -22,5 +19,4 @@ class Sage(Agent):
         self.impl = impl or SageReference()
 
     def run(self, tools: Tools) -> None:
-        # TODO: replace with the real agent (see module docstring).
         self.impl.run(tools)

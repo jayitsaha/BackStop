@@ -140,10 +140,15 @@ export default function EncorePage({ agentId, agent, customer, agentName }) {
   // ---- watchlist (client state) ----
   const [watch, setWatch] = useState([])
 
-  // ---- grab (agent-task) state ----
+  // ---- grab (agent-execute) state ----
   const [grabbing, setGrabbing] = useState('')     // key of pick being grabbed
-  const [grabRun, setGrabRun] = useState(null)
+  const [ticket, setTicket] = useState(null)       // {pick, confirmation, summary, steps}
   const [grabErr, setGrabErr] = useState('')
+
+  // ---- auto-pilot state ----
+  const [autoRunning, setAutoRunning] = useState(false)
+  const [autoStage, setAutoStage] = useState('')   // live progress line
+  const [autoErr, setAutoErr] = useState('')
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
@@ -232,25 +237,63 @@ export default function EncorePage({ agentId, agent, customer, agentName }) {
     setWatch((cur) => cur.map((w) => (w.key === key ? { ...w, target: Number(val) || 0 } : w)))
   }
 
-  /* -------------------------------------------------------- grab hand-off */
-  async function grabSeats(p) {
-    const key = pickKey(p)
-    setGrabbing(key); setGrabErr(''); setGrabRun(null)
-    const task =
-      `Please grab seats for me to ${p.artist_or_event}${p.venue ? ` at ${p.venue}` : ''}` +
+  /* -------------------------------------------------------- grab (execute) */
+  function taskFor(p) {
+    return (
+      `Grab seats to ${p.artist_or_event}${p.venue ? ` at ${p.venue}` : ''}` +
       `${p.city ? `, ${p.city}` : ''}${p.date ? ` on ${p.date}` : ''}. ` +
       `${p.seats_note ? `Preferred seats: ${p.seats_note}. ` : ''}` +
-      `The best price I'm seeing is about ${usd(p.best_price_usd, 0)} (face value ${usd(p.face_value_usd, 0)}). ` +
-      `Only buy from verified sellers, never overpay, and CONFIRM with me before you spend above ` +
-      `${usd(p.best_price_usd, 0)} or anything looks like a fake-ticket scam.`
+      `Best price ${usd(p.best_price_usd, 0)} (face value ${usd(p.face_value_usd, 0)}). ` +
+      `Buy only from verified sellers and don't overpay.`
+    )
+  }
+
+  async function grabSeats(p) {
+    const key = pickKey(p)
+    setGrabbing(key); setGrabErr(''); setTicket(null)
     try {
-      const res = await api.agentTask({ task, agent: agentId })
-      setGrabRun(res?.run || null)
+      const res = await api.agentExecute({ task: taskFor(p), agent: agentId, kind: 'ticket' })
+      setTicket({ pick: p, confirmation: res?.confirmation, summary: res?.summary, steps: res?.steps || [] })
       scrollTo('encore-handoff')
     } catch (err) {
       setGrabErr(err?.response?.data?.detail || 'Could not reach your agent. Try again.')
     } finally {
       setGrabbing('')
+    }
+  }
+
+  /* ----------------------------------------------- auto-pilot (zero clicks) */
+  async function autoPilot() {
+    setAutoRunning(true); setAutoErr(''); setTicket(null)
+    try {
+      setAutoStage('Scanning for drops…')
+      const res = await api.post('/apps/encore/radar', { budget: defaultBudget, vibe: '' })
+      setRadar(res); setActiveVibe(null); setScanning(false)
+
+      setAutoStage('Picking the best seats…')
+      const picks = res?.picks || []
+      // best = within budget + low/none scam risk, then cheapest; fall back gracefully.
+      const safe = picks.filter((p) => p.scam_risk !== 'high')
+      const ranked = [...safe].sort((a, b) => {
+        const aw = a.within_budget ? 0 : 1
+        const bw = b.within_budget ? 0 : 1
+        if (aw !== bw) return aw - bw
+        const ar = a.scam_risk === 'none' ? 0 : 1
+        const br = b.scam_risk === 'none' ? 0 : 1
+        if (ar !== br) return ar - br
+        return (a.best_price_usd || 0) - (b.best_price_usd || 0)
+      })
+      const best = ranked[0]
+      if (!best) { setAutoErr("I couldn't find safe seats within budget just now — try a vibe or tell me who you want to see."); return }
+
+      setAutoStage(`Securing tickets to ${best.artist_or_event}…`)
+      const exec = await api.agentExecute({ task: taskFor(best), agent: agentId, kind: 'ticket' })
+      setTicket({ pick: best, confirmation: exec?.confirmation, summary: exec?.summary, steps: exec?.steps || [] })
+      scrollTo('encore-handoff')
+    } catch (err) {
+      setAutoErr(err?.response?.data?.detail || "Auto-pilot hit a snag — try again.")
+    } finally {
+      setAutoRunning(false); setAutoStage('')
     }
   }
 
@@ -297,16 +340,42 @@ export default function EncorePage({ agentId, agent, customer, agentName }) {
       </div>
 
       {/* ============================ HERO: ENCORE RADAR ============================ */}
-      <Panel eyebrow="Encore is on it" title="Shows I'm watching" acc={acc} live={scanning}
+      <Panel eyebrow="Encore is on it" title="Shows I'm watching" acc={acc} live={scanning || autoRunning}
         subtitle={radar?.intro || "I scan for drops on hot shows so you don't start from a blank search box."}
         right={
-          !scanning && (
-            <button onClick={() => runRadar({ vibe: activeVibe ? VIBES.find((v) => v.label === activeVibe)?.vibe || '' : '', label: activeVibe })} className="btn-ghost !py-2 text-sm whitespace-nowrap">
-              Rescan
+          <div className="flex items-center gap-2">
+            <button
+              onClick={autoPilot}
+              disabled={autoRunning}
+              className="btn-primary bg-gold-sheen !py-2 text-sm font-semibold text-ink-950 whitespace-nowrap disabled:opacity-70"
+              title="Scan, pick the best within-budget seats, and secure them — fully autonomous"
+            >
+              {autoRunning ? 'Auto-pilot running…' : <>⚡ Auto-pilot</>}
             </button>
-          )
+            {!scanning && !autoRunning && (
+              <button onClick={() => runRadar({ vibe: activeVibe ? VIBES.find((v) => v.label === activeVibe)?.vibe || '' : '', label: activeVibe })} className="btn-ghost !py-2 text-sm whitespace-nowrap">
+                Rescan
+              </button>
+            )}
+          </div>
         }
       >
+        {/* auto-pilot live progress / error */}
+        {autoRunning && (
+          <div className={`mb-5 flex items-center gap-3 rounded-xl border ${t.border} ${t.bg} px-4 py-3 text-sm ${t.text} animate-fade-up`}>
+            <span className="relative flex h-2.5 w-2.5 shrink-0">
+              <span className={`absolute inline-flex h-full w-full animate-ping rounded-full ${t.dot} opacity-60`} />
+              <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${t.dot}`} />
+            </span>
+            <span className="font-medium">{autoStage || 'Working…'}</span>
+          </div>
+        )}
+        {autoErr && !autoRunning && (
+          <div className="mb-5 rounded-xl border border-bad/30 bg-bad/10 px-4 py-3 text-sm text-bad">
+            {autoErr}
+            <button onClick={autoPilot} className="ml-3 underline hover:text-white">Try auto-pilot again</button>
+          </div>
+        )}
         {/* vibe/genre chips Encore suggests — each re-runs the radar */}
         <div className="mb-5 flex flex-wrap gap-2">
           {VIBES.map((v) => (
@@ -485,17 +554,47 @@ export default function EncorePage({ agentId, agent, customer, agentName }) {
         </div>
       </div>
 
-      {/* ============================ GRAB HAND-OFF RESULT ============================ */}
-      {grabRun && (
-        <Panel id="encore-handoff" eyebrow="Encore at work" title="Grabbing your seats" acc={acc} live>
-          <p className="mb-4 text-sm text-slate-400">
-            Here's exactly what I did — my live tool-call log and honest report. I only buy from verified
-            sellers and I pause before spending above your price or on anything that smells like a scam.
-          </p>
-          <div className="rounded-xl border border-line bg-ink-900/40 p-4">
-            <RunTimeline run={grabRun} agent={name} />
-          </div>
-        </Panel>
+      {/* ============================ GRAB SUCCESS CARD ============================ */}
+      {ticket && (
+        <div id="encore-handoff">
+          <Panel eyebrow="Secured" title="Tickets are yours" acc="safe">
+            <div className="animate-fade-up space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-safe/30 bg-safe/10 p-4">
+                <div className="flex items-center gap-3">
+                  <span className="grid h-10 w-10 place-items-center rounded-full bg-safe/20 text-safe"><CheckIcon className="h-5 w-5" /></span>
+                  <div className="min-w-0">
+                    <div className="font-display text-lg text-white">{ticket.pick?.artist_or_event}</div>
+                    <div className="truncate text-xs text-slate-400">
+                      {[ticket.pick?.venue, ticket.pick?.city, ticket.pick?.date].filter(Boolean).join(' · ')}
+                      {ticket.pick?.seats_note ? ` — ${ticket.pick.seats_note}` : ''}
+                    </div>
+                  </div>
+                </div>
+                {ticket.confirmation && (
+                  <div className="text-right">
+                    <div className="label !text-[9px]">Confirmation</div>
+                    <div className="stat-num font-mono text-base text-safe">{ticket.confirmation}</div>
+                  </div>
+                )}
+              </div>
+
+              {ticket.summary && <p className="text-sm text-slate-300">{ticket.summary}</p>}
+
+              <ol className="space-y-2.5">
+                {(ticket.steps && ticket.steps.length ? ticket.steps : ['Found the best verified seats', 'Vetted the seller', 'Secured the tickets']).map((s, i) => (
+                  <li key={i} className="flex items-center gap-3 text-sm text-slate-200">
+                    <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-safe/15 text-safe"><CheckIcon className="h-3.5 w-3.5" /></span>
+                    {typeof s === 'string' ? s : s?.title || s?.step || JSON.stringify(s)}
+                  </li>
+                ))}
+              </ol>
+
+              <div className="flex items-center gap-1.5 border-t border-white/10 pt-3 text-xs text-slate-400">
+                <ShieldIcon className="h-3.5 w-3.5 shrink-0 text-safe" /> This purchase is insured up to {usd(quote.per_incident_limit_usd, 0)}.
+              </div>
+            </div>
+          </Panel>
+        </div>
       )}
 
       {/* ============================ ACTIVITY FEED ============================ */}
@@ -594,11 +693,11 @@ function PickCard({ p, watched, grabbing, onWatch, onGrab }) {
           title={blocked ? 'I flagged this event for high scam risk — I won’t grab these.' : ''}
           className="btn-primary flex-1 bg-info !py-2 text-sm whitespace-nowrap disabled:opacity-60"
         >
-          {blocked ? 'Flagged — blocked' : grabbing ? 'Handing off…' : 'Have Encore grab these'}
+          {blocked ? 'Flagged — blocked' : grabbing ? 'Securing…' : 'Have Encore grab these'}
         </button>
       </div>
       <div className="mt-2 flex items-center gap-1.5 text-[11px] text-slate-500">
-        <ShieldIcon className="h-3 w-3 shrink-0" /> I'll confirm before I spend a cent.
+        <ShieldIcon className="h-3 w-3 shrink-0" /> Verified sellers only · insured purchase.
       </div>
     </div>
   )

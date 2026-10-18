@@ -1,14 +1,13 @@
-"""Real public-blockchain anchoring on a free EVM testnet (Base Sepolia by default).
+"""Public-blockchain anchoring on an EVM testnet.
 
 Each agent's canonical fingerprint is committed as the calldata of a real on-chain transaction, so
-anyone can independently verify it on a public block explorer — no trusted server required. This is the
-genuinely-decentralized layer (the Firebase PoW ledger is only tamper-evident notarization; Bitcoin via
-OpenTimestamps is real but confirmation-delayed). Here the tx lands in a public testnet block in seconds
-and is instantly clickable on Basescan.
+anyone can independently verify it on a public block explorer. The tx lands in a public block in
+seconds and is instantly clickable on the explorer. This complements the proof-of-work ledger and the
+Bitcoin (OpenTimestamps) anchor.
 
 Config comes from env (loaded from .env by agents.live at import):
   CHAIN_NAME, CHAIN_ID, CHAIN_RPC_URL, CHAIN_EXPLORER, CHAIN_ADDRESS, CHAIN_PRIVATE_KEY
-The key is a throwaway testnet key (no real value); fund it from a Base Sepolia faucet.
+Use a dedicated testnet key; fund it from a testnet faucet.
 """
 from __future__ import annotations
 
@@ -46,7 +45,7 @@ def status() -> dict:
     """Wallet + chain status for the UI (address, balance, connectivity). Never raises."""
     c = _cfg()
     out = {"configured": configured(), "name": c["name"], "chain_id": c["chain_id"],
-           "explorer": c["explorer"], "address": c["address"], "connected": False,
+           "explorer": c["explorer"], "rpc": c["rpc"], "address": c["address"], "connected": False,
            "balance_eth": None, "funded": False}
     if not configured():
         out["error"] = "set CHAIN_RPC_URL + CHAIN_PRIVATE_KEY in .env"
@@ -124,3 +123,71 @@ def anchor(agent_id: str, fingerprint_hex: str) -> dict:
         "status": "confirmed" if receipt.status == 1 else "failed",
         "anchored_at": int(time.time() * 1000),
     }
+
+
+def treasury_address() -> Optional[str]:
+    return _cfg()["address"] or None
+
+
+def verify_tx(tx_hash: str, expect_to: str, min_value_wei: int = 0, wait: bool = True) -> dict:
+    """Verify a user's MetaMask payment: confirmed, sent to our treasury, and >= the expected amount.
+
+    By default WAITS for the tx to be mined (eth_sendTransaction returns the hash from the mempool before
+    it's in a block, so a naive lookup races ahead of confirmation). Polls up to ~90s."""
+    if not configured():
+        return {"valid": False, "reason": "chain not configured"}
+    w3, c = _w3()
+    try:
+        if wait:
+            receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=90, poll_latency=3)
+        else:
+            receipt = w3.eth.get_transaction_receipt(tx_hash)
+        tx = w3.eth.get_transaction(tx_hash)
+    except Exception:
+        return {"valid": False, "reason": "transaction not found or not confirmed in time — try again in a moment"}
+    to = (tx.get("to") or "")
+    to_ok = bool(to) and bool(expect_to) and to.lower() == expect_to.lower()
+    val = int(tx.get("value") or 0)
+    status_ok = receipt.get("status") == 1
+    ok = to_ok and status_ok and val >= int(min_value_wei)
+    reason = None
+    if not to_ok:
+        reason = "payment was not sent to the treasury"
+    elif not status_ok:
+        reason = "transaction failed on-chain"
+    elif val < int(min_value_wei):
+        reason = "payment amount is too low"
+    return {"valid": ok, "reason": reason, "to": to, "from": tx.get("from"),
+            "value_wei": val, "value_eth": round(val / 1e18, 6), "block": receipt.get("blockNumber")}
+
+
+def send_payout(to_address: str, amount_wei: int) -> dict:
+    """Treasury → user payout (claim settlements). Returns the tx hash + explorer URL."""
+    if not configured():
+        raise RuntimeError("payout wallet not configured")
+    from web3 import Web3
+    from eth_account import Account
+    w3, c = _w3()
+    acct = Account.from_key(c["key"])
+    to = w3.to_checksum_address(to_address)
+    amount_wei = int(amount_wei)
+    if w3.eth.get_balance(acct.address) <= amount_wei + 21000 * 10 ** 9:
+        raise RuntimeError("treasury has insufficient testnet balance for this payout")
+    try:
+        gas_price = w3.eth.gas_price
+    except Exception:
+        gas_price = w3.to_wei(1, "gwei")
+    tx = {"from": acct.address, "to": to, "value": amount_wei,
+          "nonce": w3.eth.get_transaction_count(acct.address, "pending"),
+          "chainId": c["chain_id"], "gas": 21000, "gasPrice": int(gas_price)}
+    signed = acct.sign_transaction(tx)
+    raw = getattr(signed, "raw_transaction", None) or getattr(signed, "rawTransaction")
+    tx_hash = w3.eth.send_raw_transaction(raw)
+    receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=180)
+    h = tx_hash.hex()
+    if not h.startswith("0x"):
+        h = "0x" + h
+    return {"tx_hash": h, "block_number": receipt.blockNumber, "to": to,
+            "amount_wei": amount_wei, "amount_eth": round(amount_wei / 1e18, 6),
+            "explorer_url": f"{c['explorer']}/tx/{h}", "chain": c["name"],
+            "status": "confirmed" if receipt.status == 1 else "failed", "paid_at": int(time.time() * 1000)}

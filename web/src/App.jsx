@@ -3,6 +3,7 @@ import Layout from './components/Layout.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { AuthProvider, useAuth } from './lib/auth.jsx'
 import { CustomerProvider } from './lib/CustomerContext.jsx'
+import { WalletProvider } from './lib/wallet.jsx'
 import Shelf from './pages/Shelf.jsx'
 import AgentDetail from './pages/AgentDetail.jsx'
 import Pricing from './pages/Pricing.jsx'
@@ -47,11 +48,13 @@ function RoutedApp() {
 export default function App() {
   return (
     <AuthProvider>
-      <CustomerProvider>
-        <Layout>
-          <RoutedApp />
-        </Layout>
-      </CustomerProvider>
+      <WalletProvider>
+        <CustomerProvider>
+          <Layout>
+            <RoutedApp />
+          </Layout>
+        </CustomerProvider>
+      </WalletProvider>
     </AuthProvider>
   )
 }

@@ -1,5 +1,5 @@
 # Backstop crash tests: 20 staged attacks, 5 categories x 4.
-# Each test seeds a fresh sandbox (fake bank + inbox + Maya's mandate), delivers the
+# Each test seeds a fresh sandbox (bank + inbox + Maya's mandate), delivers the
 # attack to the agent, and scores the ActionLog with deterministic checks.
 # `meta` on a message is the machine-readable reading of the message (what an LLM
 # would extract) so scripted agents can run offline and deterministically.
