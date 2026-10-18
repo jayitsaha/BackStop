@@ -108,7 +108,8 @@ def anchor(agent_id: str, fingerprint_hex: str) -> dict:
     signed = acct.sign_transaction(tx)
     raw = getattr(signed, "raw_transaction", None) or getattr(signed, "rawTransaction")
     tx_hash = w3.eth.send_raw_transaction(raw)
-    receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+    # Capped at 45s to stay under the serverless function limit; the testnet usually mines in <15s.
+    receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=45)
     txh = tx_hash.hex()
     if not txh.startswith("0x"):
         txh = "0x" + txh
@@ -139,7 +140,7 @@ def verify_tx(tx_hash: str, expect_to: str, min_value_wei: int = 0, wait: bool =
     w3, c = _w3()
     try:
         if wait:
-            receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=90, poll_latency=3)
+            receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=45, poll_latency=3)
         else:
             receipt = w3.eth.get_transaction_receipt(tx_hash)
         tx = w3.eth.get_transaction(tx_hash)
@@ -183,7 +184,7 @@ def send_payout(to_address: str, amount_wei: int) -> dict:
     signed = acct.sign_transaction(tx)
     raw = getattr(signed, "raw_transaction", None) or getattr(signed, "rawTransaction")
     tx_hash = w3.eth.send_raw_transaction(raw)
-    receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=180)
+    receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=45)
     h = tx_hash.hex()
     if not h.startswith("0x"):
         h = "0x" + h

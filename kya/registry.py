@@ -10,7 +10,8 @@ import os
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 
-SECRET = os.environ.get("BACKSTOP_KYA_SECRET", "dev-secret-change-me").encode()
+SECRET = (os.environ.get("BACKSTOP_KYA_SECRET") or os.environ.get("BACKSTOP_JWT_SECRET")
+          or "dev-secret-change-me").encode()
 
 
 @dataclass
