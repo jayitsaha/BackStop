@@ -71,20 +71,48 @@ export function GradePill({ grade, score }) {
   )
 }
 
+// --- Backstop's own mark ----------------------------------------------------
+// BackstopMark — the wordmark glyph: a crest shield with an inner "keep" chevron,
+// drawn as original art (shield motif, never a cup/bowl). Gradient-fillable.
+export function BackstopMark({ className = 'h-5 w-5' }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
+      {/* crest shield */}
+      <path
+        d="M12 2.4l7.6 2.9v5.9c0 5.2-3.3 9.1-7.6 10.9C7.7 20.3 4.4 16.4 4.4 11.2V5.3L12 2.4z"
+        fill="currentColor"
+        fillOpacity="0.16"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      {/* inner guard — a backstop wall that catches the fall */}
+      <path d="M8 12.4l4 3.4 4-3.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M12 7.2v8.6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" opacity="0.55" />
+    </svg>
+  )
+}
+
 // --- tiny inline icons (no icon dependency) --------------------------------
 export function ShieldIcon({ className = 'h-4 w-4' }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className}>
-      <path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-      <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M12 2.6l7.4 2.8v5.8c0 5-3.2 8.8-7.4 10.6C7.8 20 4.6 16.2 4.6 11.2V5.4L12 2.6z"
+        stroke="currentColor"
+        strokeWidth="1.55"
+        strokeLinejoin="round"
+      />
+      <path d="M8.7 12.1l2.3 2.3 4.4-4.6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
 export function LockIcon({ className = 'h-4 w-4' }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className}>
-      <rect x="5" y="10" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.6" />
-      <path d="M8 10V7a4 4 0 118 0v3" stroke="currentColor" strokeWidth="1.6" />
+      <rect x="5" y="10" width="14" height="10" rx="2.4" stroke="currentColor" strokeWidth="1.55" />
+      <path d="M8 10V7a4 4 0 118 0v3" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" />
+      <circle cx="12" cy="15" r="1.3" fill="currentColor" />
     </svg>
   )
 }

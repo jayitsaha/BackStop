@@ -36,10 +36,15 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import api from '../../api'
 import { cents, usd } from '../../lib/format'
-import { GradePill, ShieldIcon, LockIcon, CheckIcon, ArrowIcon } from '../marks'
-import { WidgetShell, RunTimeline, GuardField, iconFor } from '../widgets/shared.jsx'
+import { GradePill, ShieldIcon, LockIcon, CheckIcon, ArrowIcon, VerifiedMark } from '../marks'
+import { WidgetShell, RunTimeline, GuardField } from '../widgets/shared.jsx'
+import { Reveal, Stagger, stagItem, Tactile } from '../ui/motion.jsx'
+import DotField from '../ui/DotField.jsx'
+import { GlowBackdrop, GoldRule } from '../ui/Backdrop.jsx'
+import ShieldDeflect from '../ui/ShieldDeflect.jsx'
 
 /* ----- shared verdict vocabulary (fraud semantics, not the gold accent) ----- */
 const VERDICT = {
@@ -54,57 +59,76 @@ const CHANNEL = { email: '✉️', text: '💬', call: '📞', bill: '🧾' }
 function TrustStrip({ agent, customer, kpis }) {
   const q = agent?.quote || {}
   const grade = agent?.grade || {}
+  const gradeLabel = grade.grade ? `GRADE ${grade.grade}` : 'CRASH-TESTED'
   return (
-    <div className="card-raised relative overflow-hidden p-6 sm:p-8">
-      <div className="mesh" style={{ top: -120, right: '-4%', height: 320, width: 360, background: 'rgba(242,180,65,0.14)' }} />
-      <div className="mesh" style={{ bottom: -140, left: '-6%', height: 300, width: 320, background: 'rgba(63,217,154,0.08)' }} />
-      <div className="relative">
-        <div className="flex flex-wrap items-start justify-between gap-5">
-          <div className="flex items-start gap-4">
-            <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-warn/10 text-warn ring-1 ring-warn/30">
-              {iconFor(agent?.icon || 'shield', 'h-7 w-7')}
-            </div>
-            <div>
-              <div className="eyebrow mb-1 text-warn">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warn opacity-60" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-warn" />
-                </span>
-                Autonomous security · live
-              </div>
-              <h1 className="font-display text-3xl font-semibold tracking-tightish text-white sm:text-4xl">{agent?.name || 'Aegis'}</h1>
-              <p className="mt-1 max-w-xl text-sm text-slate-400">{agent?.tagline || 'Detect and block scams before they hit your wallet.'}</p>
-            </div>
-          </div>
-          <div className="flex flex-col items-end gap-2">
+    <Reveal as="section" y={22} className="card-raised relative overflow-hidden p-6 sm:p-10">
+      {/* warm ambient backdrop: dot-matrix + mocha glow + vignette */}
+      <GlowBackdrop intensity={0.95} />
+      <div className="mesh" style={{ top: -130, right: '-6%', height: 340, width: 380, background: 'rgba(196,85,45,0.20)' }} />
+
+      <div className="relative grid items-center gap-8 lg:grid-cols-[1.2fr_0.8fr]">
+        {/* ---- headline column ---- */}
+        <div>
+          <Reveal as="div" y={10} className="eyebrow mb-5 font-mono !tracking-[0.3em] text-brand/90">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-brand" />
+            </span>
+            Fraud &amp; Safety · {gradeLabel}
+          </Reveal>
+
+          <Reveal as="h1" delay={0.06} y={24} className="font-display text-6xl font-semibold leading-[0.88] tracking-tighter3 text-white sm:text-7xl">
+            {agent?.name || 'Aegis'}
+          </Reveal>
+
+          <Reveal as="p" delay={0.12} className="mt-5 max-w-xl text-lg leading-relaxed text-slate-300">
+            {agent?.tagline || 'Detect and block scams before they hit your wallet — a security console that acts before you ever have to.'}
+          </Reveal>
+
+          {/* trust marks */}
+          <Reveal delay={0.18} className="mt-6 flex flex-wrap items-center gap-2.5">
             <GradePill grade={grade.grade} score={grade.score} />
-            <div className="flex flex-wrap items-center justify-end gap-2 text-[11px]">
-              <span className="chip border-info/30 bg-info/10 text-info-soft"><ShieldIcon className="h-3.5 w-3.5" /> Verified</span>
-              <span className="chip border-warn/30 bg-warn/10 text-warn"><CheckIcon className="h-3.5 w-3.5" /> Crash-tested</span>
-              <span className="chip border-safe/30 bg-safe/10 text-safe"><LockIcon className="h-3.5 w-3.5" /> Insured</span>
-            </div>
+            <span className="chip border-brand/30 bg-brand/5 text-brand-soft">
+              <LockIcon className="h-3.5 w-3.5" /> {q.gross_premium_usd != null ? `${cents(q.gross_premium_usd)} / payment` : 'Premium'}
+            </span>
+            <VerifiedMark />
+            <span className="chip border-warn/30 bg-warn/10 text-warn"><CheckIcon className="h-3.5 w-3.5" /> Crash-tested</span>
+            <span className="chip border-safe/30 bg-safe/10 text-safe"><ShieldIcon className="h-3.5 w-3.5" /> Insured</span>
+            <span className="chip border-info/30 bg-info/10 text-info-soft"><span className="font-mono text-[11px] leading-none">⛓</span> On-chain</span>
+          </Reveal>
+
+          <Reveal delay={0.24}>
+            <span className="handwriting mt-5 block text-base text-brand-soft/80">always watching — so you don&apos;t have to.</span>
+          </Reveal>
+        </div>
+
+        {/* ---- animated crash-test shield that deflects the attacks ---- */}
+        <Reveal delay={0.1} y={16} className="relative mx-auto aspect-square w-full max-w-[22rem] lg:max-w-none">
+          <div className="pointer-events-none absolute inset-0" aria-hidden>
+            <ShieldDeflect className="h-full w-full" count={20} />
           </div>
-        </div>
-
-        <div className="rule-gold my-6" />
-
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line/60 sm:grid-cols-4">
-          <Kpi label="Premium / payment" value={q.gross_premium_usd != null ? cents(q.gross_premium_usd) : '—'} sub="you pay" tone="text-brand-soft" />
-          <Kpi label="Covered per incident" value={usd(q.per_incident_limit_usd || customer?.certificate?.per_incident_limit_usd || 0, 0)} sub="insured mistakes" tone="text-safe" />
-          <Kpi label="Threats flagged" value={kpis.flagged} sub="this sweep" tone={kpis.flagged > 0 ? 'text-bad' : 'text-slate-300'} />
-          <Kpi label="Payees frozen" value={kpis.frozen} sub="agent won't pay" tone={kpis.frozen > 0 ? 'text-warn' : 'text-slate-300'} />
-        </div>
+        </Reveal>
       </div>
-    </div>
+
+      <GoldRule className="relative my-8" />
+
+      {/* KPI band */}
+      <Stagger className="relative grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line/60 sm:grid-cols-4" gap={0.07}>
+        <Kpi label="Premium / payment" value={q.gross_premium_usd != null ? cents(q.gross_premium_usd) : '—'} sub="you pay" tone="text-brand-soft" />
+        <Kpi label="Covered per incident" value={usd(q.per_incident_limit_usd || customer?.certificate?.per_incident_limit_usd || 0, 0)} sub="insured mistakes" tone="text-safe" />
+        <Kpi label="Threats flagged" value={kpis.flagged} sub="this sweep" tone={kpis.flagged > 0 ? 'text-bad' : 'text-slate-300'} />
+        <Kpi label="Payees frozen" value={kpis.frozen} sub="agent won't pay" tone={kpis.frozen > 0 ? 'text-warn' : 'text-slate-300'} />
+      </Stagger>
+    </Reveal>
   )
 }
 function Kpi({ label, value, sub, tone }) {
   return (
-    <div className="bg-ink-850/80 px-4 py-3.5">
+    <motion.div variants={stagItem} className="bg-ink-850/80 px-4 py-3.5">
       <div className="label !text-[10px]">{label}</div>
       <div className={`stat-num mt-1 text-2xl ${tone}`}>{value}</div>
       <div className="mt-0.5 text-[11px] text-slate-500">{sub}</div>
-    </div>
+    </motion.div>
   )
 }
 
@@ -133,18 +157,18 @@ function PostureBanner({ status, counts, onResweep, sweeping }) {
     Icon = scams ? <span className="text-lg leading-none">🛡️</span> : <CheckIcon className="h-5 w-5" />
   }
   return (
-    <div className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-5 py-4 ${tone}`}>
+    <Reveal className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-5 py-4 shadow-panel backdrop-blur-xl ${tone}`}>
       <div className="flex items-center gap-3">
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/5">{Icon}</span>
         <div>
-          <div className="font-display text-lg leading-tight text-white">{headline}</div>
-          <div className="text-[11px] uppercase tracking-wider opacity-80">Working on your behalf · no action needed unless you want to override</div>
+          <div className="font-display text-lg leading-tight tracking-tightish text-white">{headline}</div>
+          <div className="font-mono text-[11px] uppercase tracking-[0.18em] opacity-80">Working on your behalf · no action needed unless you want to override</div>
         </div>
       </div>
-      <button onClick={onResweep} disabled={sweeping} className="btn-ghost shrink-0 !py-2 text-xs">
+      <Tactile onClick={onResweep} disabled={sweeping} className="btn-ghost shrink-0 !py-2 text-xs">
         {sweeping ? 'Sweeping…' : 'Re-sweep now'}
-      </button>
-    </div>
+      </Tactile>
+    </Reveal>
   )
 }
 
@@ -185,14 +209,15 @@ function ThreatCard({ item, onFreeze, onDismiss, onDraft, frozenNames }) {
 
   if (done) {
     return (
-      <div className={`rounded-xl border px-4 py-3 ${meta.ring}`}>
+      <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+        className={`rounded-xl border px-4 py-3 ${meta.ring}`}>
         <div className="flex items-center gap-2 text-sm font-medium text-safe"><CheckIcon className="h-4 w-4" /> {done.label}</div>
-      </div>
+      </motion.div>
     )
   }
 
   return (
-    <div className={`animate-fade-up rounded-xl border p-4 ${meta.ring}`}>
+    <motion.div variants={stagItem} className={`rounded-xl border p-4 shadow-panel ${meta.ring}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -200,28 +225,28 @@ function ThreatCard({ item, onFreeze, onDismiss, onDraft, frozenNames }) {
             <span className="truncate text-sm font-semibold text-white">{item.subject}</span>
           </div>
           <div className="mt-0.5 truncate text-xs text-slate-500">{item.sender}
-            {item.amount ? <span className="text-slate-400"> · {usd(item.amount)}</span> : null}
+            {item.amount ? <span className="font-mono text-slate-400"> · {usd(item.amount)}</span> : null}
             {item.account_last4 ? <span className="font-mono text-slate-500"> · ••{item.account_last4}</span> : null}
           </div>
         </div>
         <span className={`chip shrink-0 !px-2 !py-0.5 text-[11px] ${meta.chip}`}>
-          <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} /> {item.verdict} · {item.risk_score}
+          <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} /> {item.verdict} · <span className="font-mono">{item.risk_score}</span>
         </span>
       </div>
       {item.reason && <p className="mt-2 text-xs leading-relaxed text-slate-400">{item.reason}</p>}
 
       <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/5 pt-3">
-        <span className="text-[11px] uppercase tracking-wider text-slate-600">Aegis proposes</span>
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-slate-600">Aegis proposes</span>
         {item.action === 'freeze_payee' && item.payee && (
-          <button onClick={freeze} disabled={busy || frozen}
+          <Tactile onClick={freeze} disabled={busy || frozen}
             className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition ${frozen ? 'border-bad/30 text-bad' : 'border-bad/40 text-bad hover:bg-bad/10'}`}>
             <LockIcon className="mr-1 inline h-3.5 w-3.5" />{busy === 'freeze' ? 'Freezing…' : frozen ? 'Already frozen' : `Freeze ${item.payee}`}
-          </button>
+          </Tactile>
         )}
         {item.action === 'draft_reply' && (
-          <button onClick={draft} disabled={busy} className="rounded-lg border border-info/40 px-2.5 py-1 text-xs font-medium text-info-soft transition hover:bg-info/10">
+          <Tactile onClick={draft} disabled={busy} className="rounded-lg border border-info/40 px-2.5 py-1 text-xs font-medium text-info-soft transition hover:bg-info/10">
             {busy === 'draft' ? 'Drafting…' : 'Draft a safe reply'}
-          </button>
+          </Tactile>
         )}
         <button onClick={() => onDismiss(item.id)} className="ml-auto text-xs text-slate-500 hover:text-white">Dismiss</button>
       </div>
@@ -236,7 +261,7 @@ function ThreatCard({ item, onFreeze, onDismiss, onDraft, frozenNames }) {
           </div>
         </div>
       )}
-    </div>
+    </motion.div>
   )
 }
 
@@ -297,6 +322,7 @@ function ThreatFeed({ sweepRef, onSweepResult, onStatus, onFreeze, frozenNames }
   }, [items])
 
   return (
+    <Reveal as="div">
     <WidgetShell
       title="Live threat feed"
       subtitle={`${agent} triaged your incoming bills, emails, texts and calls automatically. Confirm or override its proposed actions below.`}
@@ -319,14 +345,15 @@ function ThreatFeed({ sweepRef, onSweepResult, onStatus, onFreeze, frozenNames }
         items.length === 0 ? (
           <p className="rounded-xl border border-safe/25 bg-safe/[0.04] px-4 py-8 text-center text-sm text-safe">All clear — Aegis found nothing suspicious in this sweep.</p>
         ) : (
-          <div className="space-y-2.5">
+          <Stagger className="space-y-2.5" gap={0.05}>
             {items.map((it) => (
               <ThreatCard key={it.id} item={it} frozenNames={frozenNames} onFreeze={onFreeze} onDismiss={dismiss} />
             ))}
-          </div>
+          </Stagger>
         )
       )}
     </WidgetShell>
+    </Reveal>
   )
 }
 
@@ -343,9 +370,10 @@ function RiskMeter({ score, meta }) {
       </div>
       <div className="relative mt-2 h-2.5 overflow-hidden rounded-full bg-ink-700">
         <div className="absolute inset-0 opacity-40" style={{ background: 'linear-gradient(90deg,#3FD99A 0%,#F2B441 55%,#FF6A62 100%)' }} />
-        <div className={`relative h-full ${meta.bar} transition-all duration-700`} style={{ width: `${pct}%` }} />
+        <motion.div className={`relative h-full ${meta.bar}`} initial={{ width: 0 }} animate={{ width: `${pct}%` }}
+          transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }} />
       </div>
-      <div className="mt-1 flex justify-between text-[10px] uppercase tracking-wider text-slate-600">
+      <div className="mt-1 flex justify-between font-mono text-[10px] uppercase tracking-wider text-slate-600">
         <span>safe</span><span>caution</span><span>scam</span>
       </div>
     </div>
@@ -398,6 +426,7 @@ function DeepScan({ onFreeze, frozenNames, seed }) {
   }
 
   return (
+    <Reveal as="div">
     <WidgetShell
       title="Check something specific"
       subtitle="Got a message Aegis hasn't seen? Paste it for a full forensic scan. (Pre-filled from your latest flagged item — just hit scan.)"
@@ -406,12 +435,12 @@ function DeepScan({ onFreeze, frozenNames, seed }) {
     >
       {examples.length > 0 && (
         <div className="mb-3 flex flex-wrap items-center gap-2">
-          <span className="text-[11px] text-slate-500">Or try a specimen:</span>
+          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-slate-500">Or try a specimen:</span>
           {examples.map((ex) => (
-            <button key={ex.id} onClick={() => useExample(ex)} disabled={busy}
+            <Tactile key={ex.id} onClick={() => useExample(ex)} disabled={busy}
               className={`rounded-full border px-2.5 py-1 text-[11px] transition hover:text-white disabled:opacity-50 ${ex.tone === 'scam' ? 'border-bad/30 text-bad hover:bg-bad/10' : 'border-safe/30 text-safe hover:bg-safe/10'}`}>
               {ex.label}
-            </button>
+            </Tactile>
           ))}
         </div>
       )}
@@ -423,9 +452,9 @@ function DeepScan({ onFreeze, frozenNames, seed }) {
             className="inp resize-y text-sm" />
           <div className="mt-3 flex items-center gap-3">
             {text && <button onClick={() => { setText(''); setRes(null); setErr('') }} className="text-xs text-slate-500 hover:text-white">clear</button>}
-            <button onClick={() => scan()} disabled={busy} className="btn-primary ml-auto !py-2 text-sm">
+            <Tactile onClick={() => scan()} disabled={busy} className="btn-primary ml-auto !py-2 text-sm">
               {busy ? 'Scanning…' : 'Run threat scan'} <ArrowIcon className="h-4 w-4" />
-            </button>
+            </Tactile>
           </div>
           {err && <div className="mt-3 rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-xs text-bad">{err}</div>}
         </div>
@@ -467,17 +496,18 @@ function DeepScan({ onFreeze, frozenNames, seed }) {
                 {res.safe_next_step && <p className="mt-2 text-xs italic text-slate-400">Safe next step: {res.safe_next_step}</p>}
               </div>
               {payee && res.verdict !== 'safe' && (
-                <button onClick={freezePayee} disabled={alreadyFrozen || froze}
+                <Tactile onClick={freezePayee} disabled={alreadyFrozen || froze}
                   className={`btn w-full !py-2 text-sm ${alreadyFrozen || froze ? 'border border-bad/30 text-bad' : 'btn-ghost border-bad/40 text-bad hover:bg-bad/10'}`}>
                   <LockIcon className="h-4 w-4" />
                   {alreadyFrozen || froze ? `“${payee}” is frozen — Aegis won't pay it` : `Freeze “${payee}” so Aegis never pays it`}
-                </button>
+                </Tactile>
               )}
             </div>
           )}
         </div>
       </div>
     </WidgetShell>
+    </Reveal>
   )
 }
 
@@ -499,13 +529,15 @@ function InboxTriage({ agentName, agentId, onDone }) {
   }
 
   return (
+    <Reveal as="div" className="h-full">
     <WidgetShell
       title={`Send ${agentName} on a deeper run`}
       subtitle="Aegis sweeps every connected channel and secures everything it flags — then confirms exactly what it did."
       acc="safe"
       eyebrow="One-tap secure"
       live
-      right={<button onClick={go} disabled={busy} className="btn-ghost whitespace-nowrap border-safe/30 hover:border-safe/60">{busy ? 'Securing…' : res ? 'Run again' : `Run ${agentName}`}</button>}
+      className="h-full"
+      right={<Tactile onClick={go} disabled={busy} className="btn-ghost whitespace-nowrap border-safe/30 hover:border-safe/60">{busy ? 'Securing…' : res ? 'Run again' : `Run ${agentName}`}</Tactile>}
     >
       {err && <div className="rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-xs text-bad">{err}</div>}
       {!res && !busy && !err && (
@@ -546,6 +578,7 @@ function InboxTriage({ agentName, agentId, onDone }) {
         </div>
       )}
     </WidgetShell>
+    </Reveal>
   )
 }
 
@@ -565,16 +598,18 @@ function FreezeVault({ frozen, onFreeze, onUnfreeze }) {
   }
 
   return (
+    <Reveal as="div" className="h-full">
     <WidgetShell
       title="Freeze vault"
       subtitle="Any payee you freeze here is one Aegis will never pay — no matter how convincing the message."
       acc="bad"
       eyebrow={`Payment blocklist · ${frozen.length} frozen`}
+      className="h-full"
     >
       <div className="grid gap-2 sm:grid-cols-[1.3fr_1.3fr_auto]">
         <input value={payee} onChange={(e) => setPayee(e.target.value)} placeholder="Payee name (e.g. Greenoak Rentals)" className="inp text-sm" />
         <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (optional)" className="inp text-sm" />
-        <button onClick={add} disabled={busy} className="btn-ghost whitespace-nowrap border-bad/40 text-bad hover:bg-bad/10"><LockIcon className="h-4 w-4" /> Freeze</button>
+        <Tactile onClick={add} disabled={busy} className="btn-ghost whitespace-nowrap border-bad/40 text-bad hover:bg-bad/10"><LockIcon className="h-4 w-4" /> Freeze</Tactile>
       </div>
       {err && <div className="mt-2 text-xs text-bad">{err}</div>}
 
@@ -595,6 +630,7 @@ function FreezeVault({ frozen, onFreeze, onUnfreeze }) {
         ))}
       </div>
     </WidgetShell>
+    </Reveal>
   )
 }
 
@@ -602,7 +638,8 @@ function FreezeVault({ frozen, onFreeze, onUnfreeze }) {
 function ActivityFeed({ runs, agentName }) {
   const list = (runs || []).slice().reverse()
   return (
-    <WidgetShell title="What Aegis did" subtitle="Every live run, newest first." acc="info" eyebrow={`Activity · ${list.length}`}>
+    <Reveal as="div" className="h-full">
+    <WidgetShell title="What Aegis did" subtitle="Every live run, newest first." acc="info" eyebrow={`Activity · ${list.length}`} className="h-full">
       {list.length === 0 ? (
         <p className="rounded-xl border border-line bg-ink-950/50 px-4 py-8 text-center text-sm text-slate-600">No deeper runs yet — send Aegis on a run above and its work shows up here.</p>
       ) : (
@@ -619,6 +656,7 @@ function ActivityFeed({ runs, agentName }) {
         </div>
       )}
     </WidgetShell>
+    </Reveal>
   )
 }
 
@@ -627,7 +665,8 @@ function InsuranceStrip({ agent, customer }) {
   const claims = customer?.claims || []
   const limit = agent?.quote?.per_incident_limit_usd || cert.per_incident_limit_usd || 0
   return (
-    <WidgetShell title="Insurance & claims" subtitle="Mistakes Aegis makes inside your mandate are covered. File and track claims here." acc="safe" eyebrow="Backstop policy">
+    <Reveal as="div" className="h-full">
+    <WidgetShell title="Insurance & claims" subtitle="Mistakes Aegis makes inside your mandate are covered. File and track claims here." acc="safe" eyebrow="Backstop policy" className="h-full">
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-safe/25 bg-safe/5 p-4">
           <div className="label text-safe">Per-incident cover</div>
@@ -644,9 +683,10 @@ function InsuranceStrip({ agent, customer }) {
       </div>
       <div className="mt-4 flex items-center justify-between rounded-xl border border-line bg-ink-950/50 px-4 py-3">
         <span className="text-sm text-slate-400">Something slipped through? Open a claim with the evidence.</span>
-        <Link to="/claims" className="btn-ghost !py-2 text-sm">Go to claims <ArrowIcon className="h-4 w-4" /></Link>
+        <Tactile as={Link} to="/claims" className="btn-ghost !py-2 text-sm">Go to claims <ArrowIcon className="h-4 w-4" /></Tactile>
       </div>
     </WidgetShell>
+    </Reveal>
   )
 }
 
@@ -689,19 +729,27 @@ function AutoPilot({ agentName, onFreeze, onDone }) {
   }
 
   return (
-    <div className="card relative overflow-hidden p-5 sm:p-6">
-      <div className="mesh" style={{ top: -90, right: '2%', height: 200, width: 240, background: 'rgba(242,193,78,0.14)' }} />
+    <Reveal as="div" className="card relative overflow-hidden p-5 sm:p-7">
+      {/* warm backdrop — mocha glow + faint dot-matrix */}
+      <div className="pointer-events-none absolute inset-0 opacity-[0.35]" aria-hidden
+        style={{ maskImage: 'radial-gradient(60% 70% at 20% 10%, #000 0%, transparent 80%)', WebkitMaskImage: 'radial-gradient(60% 70% at 20% 10%, #000 0%, transparent 80%)' }}>
+        <DotField cell={8} speed={0.05} opacity={0.5} />
+      </div>
+      <div className="mesh" style={{ top: -90, right: '2%', height: 220, width: 260, background: 'rgba(196,85,45,0.20)' }} />
       <div className="relative flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand/15 text-2xl ring-1 ring-brand/30">⚡</span>
+        <div className="flex items-start gap-3.5">
+          <motion.span
+            animate={{ scale: [1, 1.08, 1] }} transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+            className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-brand/15 text-2xl text-brand ring-1 ring-brand/30 shadow-glow">⚡</motion.span>
           <div>
-            <h3 className="font-display text-xl tracking-tightish text-white">Auto-pilot</h3>
-            <p className="mt-0.5 max-w-md text-sm text-slate-400">One tap and {agentName} sweeps every channel and freezes every payee it flags — no further clicks.</p>
+            <div className="eyebrow mb-1 font-mono !tracking-[0.26em] text-brand/90">Autonomous defense</div>
+            <h3 className="font-display text-2xl tracking-tighter2 text-white">Auto-pilot</h3>
+            <p className="mt-1 max-w-md text-sm text-slate-400">One tap and {agentName} sweeps every channel and freezes every payee it flags — no further clicks.</p>
           </div>
         </div>
-        <button onClick={run} disabled={running} className="btn-primary shrink-0 !py-2.5">
+        <Tactile onClick={run} disabled={running} className="btn-primary shrink-0 !py-2.5">
           {running ? 'Securing…' : <>⚡ Secure my accounts</>}
-        </button>
+        </Tactile>
       </div>
 
       {(running || result) && (
@@ -714,11 +762,15 @@ function AutoPilot({ agentName, onFreeze, onDone }) {
           )}
           {log.length > 0 && (
             <ol className="mt-2 space-y-1.5">
-              {log.map((line, i) => (
-                <li key={i} className="flex animate-fade-up items-center gap-2 text-xs text-slate-400" style={{ animationDelay: `${i * 50}ms` }}>
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand/70" /> {line}
-                </li>
-              ))}
+              <AnimatePresence initial={false}>
+                {log.map((line, i) => (
+                  <motion.li key={i} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                    className="flex items-center gap-2 font-mono text-xs text-slate-400">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand/70" /> {line}
+                  </motion.li>
+                ))}
+              </AnimatePresence>
             </ol>
           )}
           {result && !result.error && (
@@ -737,7 +789,7 @@ function AutoPilot({ agentName, onFreeze, onDone }) {
           {result?.error && <div className="mt-2 text-xs text-bad">Auto-pilot hit a snag — try again or use the feed below.</div>}
         </div>
       )}
-    </div>
+    </Reveal>
   )
 }
 

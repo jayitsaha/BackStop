@@ -4,11 +4,11 @@ import { CheckIcon, ShieldIcon } from '../marks'
 /* ------------------------------------------------------------------ accents */
 // Full literal class strings per accent so Tailwind's JIT keeps them.
 export const ACCENTS = {
-  brand: { text: 'text-brand', soft: 'text-brand-soft', bg: 'bg-brand/10', bgSoft: 'bg-brand/5', border: 'border-brand/30', ring: 'ring-brand/30', dot: 'bg-brand', stroke: '#F2C14E', fill: 'rgba(242,193,78,0.10)' },
-  info: { text: 'text-info', soft: 'text-info-soft', bg: 'bg-info/10', bgSoft: 'bg-info/5', border: 'border-info/30', ring: 'ring-info/30', dot: 'bg-info', stroke: '#6E8BFF', fill: 'rgba(110,139,255,0.10)' },
-  safe: { text: 'text-safe', soft: 'text-safe', bg: 'bg-safe/10', bgSoft: 'bg-safe/5', border: 'border-safe/30', ring: 'ring-safe/30', dot: 'bg-safe', stroke: '#3FD99A', fill: 'rgba(63,217,154,0.10)' },
-  warn: { text: 'text-warn', soft: 'text-warn', bg: 'bg-warn/10', bgSoft: 'bg-warn/5', border: 'border-warn/30', ring: 'ring-warn/30', dot: 'bg-warn', stroke: '#F2B441', fill: 'rgba(242,180,65,0.10)' },
-  bad: { text: 'text-bad', soft: 'text-bad', bg: 'bg-bad/10', bgSoft: 'bg-bad/5', border: 'border-bad/30', ring: 'ring-bad/30', dot: 'bg-bad', stroke: '#FF6A62', fill: 'rgba(255,106,98,0.10)' },
+  brand: { text: 'text-brand', soft: 'text-brand-soft', bg: 'bg-brand/10', bgSoft: 'bg-brand/5', border: 'border-brand/30', ring: 'ring-brand/30', dot: 'bg-brand', stroke: '#c4552d', fill: 'rgba(196,85,45,0.12)' },
+  info: { text: 'text-info', soft: 'text-info-soft', bg: 'bg-info/10', bgSoft: 'bg-info/5', border: 'border-info/30', ring: 'ring-info/30', dot: 'bg-info', stroke: '#2ac6e4', fill: 'rgba(42,198,228,0.10)' },
+  safe: { text: 'text-safe', soft: 'text-safe', bg: 'bg-safe/10', bgSoft: 'bg-safe/5', border: 'border-safe/30', ring: 'ring-safe/30', dot: 'bg-safe', stroke: '#3d9a55', fill: 'rgba(61,154,85,0.12)' },
+  warn: { text: 'text-warn', soft: 'text-warn', bg: 'bg-warn/10', bgSoft: 'bg-warn/5', border: 'border-warn/30', ring: 'ring-warn/30', dot: 'bg-warn', stroke: '#f0bd36', fill: 'rgba(240,189,54,0.10)' },
+  bad: { text: 'text-bad', soft: 'text-bad', bg: 'bg-bad/10', bgSoft: 'bg-bad/5', border: 'border-bad/30', ring: 'ring-bad/30', dot: 'bg-bad', stroke: '#dd6381', fill: 'rgba(221,99,129,0.12)' },
 }
 export const accent = (a) => ACCENTS[a] || ACCENTS.brand
 
@@ -153,8 +153,9 @@ export function WidgetShell({ title, subtitle, eyebrow, acc, live, right, childr
 
 export function WidgetUnavailable({ type, title }) {
   return (
-    <div className="card p-6">
-      {title && <h3 className="font-display text-lg text-white">{title}</h3>}
+    <div className="card relative overflow-hidden p-6">
+      <div className="eyebrow mb-1 text-slate-500">Not available</div>
+      {title && <h3 className="font-display text-lg tracking-tightish text-white">{title}</h3>}
       <p className="mt-1 text-sm text-slate-500">
         This widget{type ? ` (“${type}”)` : ''} isn’t available yet. The rest of your dashboard is fine.
       </p>

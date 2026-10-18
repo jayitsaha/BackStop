@@ -30,13 +30,22 @@
      Activity feed    ← customer.runs           Insurance strip → /claims
 
    PHASE 3 · BUILD — wired below to the real structured backend results.
+
+   VISUAL LAYER · "Mocha Noir" — espresso-black canvas, burnt-terracotta glows,
+     a live agent-network globe as the NOC hero motif, Source Serif display type,
+     Geist Mono readouts, framer-motion reveals. All logic/endpoints unchanged.
    ========================================================================== */
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import api from '../../api'
 import { cents } from '../../lib/format'
 import { GradePill, VerifiedMark, ShieldIcon, LockIcon, CheckIcon, XIcon, ArrowIcon } from '../marks'
 import { WidgetShell, accent as accentOf, RunTimeline } from '../widgets/shared.jsx'
+import { Reveal, Stagger, stagItem, Tactile } from '../ui/motion.jsx'
+import DotField from '../ui/DotField.jsx'
+import { GlowBackdrop, GoldRule } from '../ui/Backdrop.jsx'
+import AgentGlobe from '../ui/AgentGlobe.jsx'
 
 const REFRESH_MS = 15000
 
@@ -51,6 +60,8 @@ const SEV = {
   medium: 'border-warn/30 bg-warn/10 text-warn',
   high: 'border-bad/30 bg-bad/10 text-bad',
 }
+// Warm "Mocha Noir" lines for canvas/chart chrome (replaces the old cool slate).
+const WARM_LINE = '#2a211c'
 const SAMPLE_LOGS = `185.220.101.5 - - GET /login 200 UA="python-requests/2.28" (412 reqs / 60s)
 45.9.148.3 - - POST /signup 200 UA="curl/7.88" email=a9f3@mailinator.com
 45.9.148.3 - - POST /signup 200 UA="curl/7.88" email=b2k1@mailinator.com
@@ -68,20 +79,20 @@ function BotGauge({ score = 0, confidence = 0 }) {
   return (
     <div className="relative grid place-items-center">
       <svg viewBox="0 0 140 140" className="h-40 w-40 -rotate-90">
-        <circle cx="70" cy="70" r={r} fill="none" stroke="#242b3b" strokeWidth="12" />
+        <circle cx="70" cy="70" r={r} fill="none" stroke={WARM_LINE} strokeWidth="12" />
         <circle
           cx="70" cy="70" r={r} fill="none" stroke={cls.hex} strokeWidth="12" strokeLinecap="round"
           strokeDasharray={`${dash} ${circ}`} className="transition-all duration-700"
-          style={{ filter: `drop-shadow(0 0 8px ${cls.hex}66)` }}
+          style={{ filter: `drop-shadow(0 0 10px ${cls.hex}77)` }}
         />
       </svg>
       <div className="absolute flex flex-col items-center">
         <span className={`stat-num text-4xl ${cls.text}`}>{score}</span>
-        <span className="label mt-0.5">bot score</span>
+        <span className="label mt-0.5 !font-mono">bot score</span>
         <span className={`chip mt-2 !px-2 !py-0.5 text-[10px] ${cls.chip}`}>{cls.label}-leaning</span>
       </div>
       {confidence ? (
-        <div className="mt-3 text-center text-[11px] text-slate-500">
+        <div className="mt-3 text-center font-mono text-[11px] text-slate-500">
           confidence <b className="text-slate-300">{Math.round(confidence * 100)}%</b>
         </div>
       ) : null}
@@ -97,18 +108,18 @@ function AnalysisBody({ a, onBlock, blockedIds }) {
       <div className="grid items-center gap-5 sm:grid-cols-[auto_1fr]">
         <BotGauge score={a.bot_score} confidence={a.confidence} />
         <div>
-          <div className="label mb-1">Verdict</div>
+          <div className="eyebrow mb-1 text-brand-soft">Verdict</div>
           <p className="text-sm leading-relaxed text-slate-200">{a.verdict || '—'}</p>
           <div className="mt-3 flex gap-4 text-sm">
-            <span className="text-slate-400">Human <b className="text-safe">{a.human_pct}%</b></span>
-            <span className="text-slate-400">Bot <b className="text-bad">{a.bot_score}%</b></span>
+            <span className="text-slate-400">Human <b className="font-mono text-safe">{a.human_pct}%</b></span>
+            <span className="text-slate-400">Bot <b className="font-mono text-bad">{a.bot_score}%</b></span>
           </div>
         </div>
       </div>
 
       {a.signals?.length > 0 && (
         <div>
-          <div className="label mb-2">Signals</div>
+          <div className="eyebrow mb-2 text-slate-400">Signals</div>
           <div className="space-y-2">
             {a.signals.map((s, i) => (
               <div key={i} className="flex items-start justify-between gap-3 rounded-xl border border-line bg-ink-900/40 px-3 py-2">
@@ -125,7 +136,7 @@ function AnalysisBody({ a, onBlock, blockedIds }) {
 
       {a.entities?.length > 0 && (
         <div>
-          <div className="label mb-2">Classified clients</div>
+          <div className="eyebrow mb-2 text-slate-400">Classified clients</div>
           <div className="overflow-x-auto rounded-xl border border-line">
             <table className="w-full text-left text-sm">
               <thead>
@@ -142,14 +153,14 @@ function AnalysisBody({ a, onBlock, blockedIds }) {
                   const c = CLASS[e.classification] || CLASS.suspect
                   const blocked = blockedIds?.has(e.id)
                   return (
-                    <tr key={i} className="border-b border-line/60 last:border-0">
+                    <tr key={i} className="border-b border-line/60 transition-colors last:border-0 hover:bg-ink-900/40">
                       <td className="px-3 py-2 font-mono text-xs text-slate-300">{e.id}</td>
                       <td className="px-3 py-2"><span className={`chip !px-2 !py-0.5 text-[10px] ${c.chip}`}><span className={`h-1.5 w-1.5 rounded-full ${c.dot}`} />{c.label}</span></td>
                       <td className={`px-3 py-2 font-mono ${c.text}`}>{e.score}</td>
                       <td className="px-3 py-2 text-xs text-slate-500">{e.reason}</td>
                       <td className="px-3 py-2 text-right">
                         {e.classification !== 'human' && (
-                          <button onClick={() => onBlock?.(e.id, e.reason)} disabled={blocked} className="text-xs text-slate-400 hover:text-bad disabled:text-slate-600">
+                          <button onClick={() => onBlock?.(e.id, e.reason)} disabled={blocked} className="font-mono text-xs text-slate-400 transition-colors hover:text-bad disabled:text-slate-600">
                             {blocked ? 'blocked' : 'block'}
                           </button>
                         )}
@@ -165,7 +176,7 @@ function AnalysisBody({ a, onBlock, blockedIds }) {
 
       {a.recommended_mitigations?.length > 0 && (
         <div>
-          <div className="label mb-2">Recommended mitigations</div>
+          <div className="eyebrow mb-2 text-slate-400">Recommended mitigations</div>
           <div className="flex flex-wrap gap-2">
             {a.recommended_mitigations.map((m, i) => (
               <span key={i} className="chip border-warn/30 bg-warn/10 text-warn">{m}</span>
@@ -179,11 +190,13 @@ function AnalysisBody({ a, onBlock, blockedIds }) {
 
 /* ====================================================================== PAGE */
 export default function VantaPage({ agentId, agent = {}, customer = {}, agentName }) {
-  const acc = accentOf(agent.accent || 'warn')
+  const brand = accentOf('brand')
   const name = agent.name || agentName || 'Vanta'
   const quote = agent.quote || {}
   const grade = agent.grade || {}
   const runs = Array.isArray(customer.runs) ? customer.runs : []
+  const tagline = agent.tagline || 'Reads your traffic, signup bursts and request patterns — names the bots, shows the evidence, and stops them before they ever touch a real user.'
+  const coveredLimit = quote.per_incident_limit_usd ? `$${Number(quote.per_incident_limit_usd).toLocaleString('en-US')}` : '—'
 
   // ---- Live monitor state
   const [live, setLive] = useState(null)
@@ -387,66 +400,119 @@ export default function VantaPage({ agentId, agent = {}, customer = {}, agentNam
   const chartData = useMemo(() => (live?.breakdown || []).map((b) => ({ ...b })), [live])
   const liveBots = useMemo(() => (live?.entities || []).filter((e) => e.classification === 'bot').length, [live])
   const liveSources = (live?.entities || []).length
+  const liveSuspect = (live?.entities || []).filter((e) => e.classification === 'suspect').length
   const proposedCount = blocklist.filter((b) => b.status === 'proposed').length
 
   return (
     <div className="space-y-6">
-      {/* =============================================== TRUST / IDENTITY STRIP */}
-      <div className="card-raised relative overflow-hidden p-6 sm:p-7">
-        <div className="mesh" style={{ top: '-120px', right: '-4%', height: 260, width: 320, background: acc.fill }} />
-        <div className="relative flex flex-wrap items-start justify-between gap-5">
+      {/* =============================================== CINEMATIC HERO / NOC */}
+      <Reveal as="section" className="card-raised relative overflow-hidden p-7 shadow-float sm:p-9">
+        <GlowBackdrop />
+
+        <div className="relative grid gap-8 lg:grid-cols-[1.25fr_0.9fr] lg:items-center">
+          {/* ---- left: identity + proactive headline ---- */}
           <div className="min-w-0">
-            <div className={`eyebrow mb-2 ${acc.text}`}>
+            <Reveal as="div" y={10} className="eyebrow !font-mono text-brand-soft">
               <span className="relative flex h-2 w-2">
-                <span className={`absolute inline-flex h-full w-full animate-ping rounded-full ${acc.dot} opacity-60`} />
-                <span className={`relative inline-flex h-2 w-2 rounded-full ${acc.dot}`} />
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand opacity-60" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-brand" />
               </span>
-              Bot defense · monitoring live
-            </div>
-            <h1 className="font-display text-4xl font-semibold tracking-tightish text-white">{name}</h1>
-            {/* proactive, agent-is-defending headline */}
-            <p className="mt-2 max-w-xl text-lg text-slate-300">
-              {liveLoading ? (
-                <span className="text-slate-500">Vanta is reading your live traffic…</span>
-              ) : liveBots > 0 ? (
-                <>Vanta is auto-blocking <b className="text-bad">{liveBots}</b> {liveBots === 1 ? 'bot' : 'bots'} across <b className="text-white">{liveSources}</b> monitored sources right now.</>
-              ) : (
-                <>Vanta is watching <b className="text-white">{liveSources || '—'}</b> sources — traffic looks clean right now.</>
-              )}
-            </p>
-            <div className="mt-4 flex flex-wrap items-center gap-2">
+              Web &amp; bots · Grade {grade.grade || 'A'} · monitoring live
+            </Reveal>
+
+            <Reveal as="h1" delay={0.05} y={20} className="mt-5 font-display text-6xl font-semibold leading-[0.88] tracking-tighter3 text-white md:text-7xl">
+              {name}<span className="text-gold">.</span>
+            </Reveal>
+
+            <Reveal as="p" delay={0.1} className="mt-5 max-w-xl text-lg leading-relaxed text-slate-400">
+              {tagline}
+            </Reveal>
+
+            {/* dynamic, agent-is-defending status line */}
+            <Reveal as="div" delay={0.15} className="mt-5 inline-flex items-center gap-2.5 rounded-xl border border-line bg-ink-900/50 px-3.5 py-2 text-[15px]">
+              <span className={`relative flex h-2 w-2 ${liveLoading ? '' : ''}`}>
+                <span className={`absolute inline-flex h-full w-full animate-ping rounded-full ${liveBots > 0 ? 'bg-bad' : 'bg-safe'} opacity-60`} />
+                <span className={`relative inline-flex h-2 w-2 rounded-full ${liveBots > 0 ? 'bg-bad' : 'bg-safe'}`} />
+              </span>
+              <span className="text-slate-300">
+                {liveLoading ? (
+                  <span className="text-slate-500">Vanta is reading your live traffic…</span>
+                ) : liveBots > 0 ? (
+                  <>Auto-blocking <b className="font-mono text-bad">{liveBots}</b> {liveBots === 1 ? 'bot' : 'bots'} across <b className="font-mono text-white">{liveSources}</b> monitored sources.</>
+                ) : (
+                  <>Watching <b className="font-mono text-white">{liveSources || '—'}</b> sources — traffic looks clean.</>
+                )}
+              </span>
+            </Reveal>
+
+            <Reveal delay={0.2} className="mt-6 flex flex-wrap items-center gap-2">
               <VerifiedMark />
               <GradePill grade={grade.grade} score={grade.score} />
               <span className="chip border-safe/30 bg-safe/10 text-safe">
                 <LockIcon className="h-3.5 w-3.5" /> Insured · {cents(quote.gross_premium_usd)}/call
               </span>
+            </Reveal>
+
+            <span className="handwriting mt-4 block text-base text-brand-soft/80">never block a real user without proof.</span>
+          </div>
+
+          {/* ---- right: live agent-network globe (traffic motif + NOC readout) ---- */}
+          <Reveal delay={0.12} className="relative order-first lg:order-last">
+            <div className="relative h-56 overflow-hidden rounded-card border border-line bg-ink-900/40 shadow-panel sm:h-64 lg:h-[320px]">
+              <div className="absolute inset-0 opacity-70">
+                <DotField cell={6} speed={0.05} opacity={0.6} />
+              </div>
+              <div className="absolute inset-0 p-2 lg:p-4">
+                <AgentGlobe className="h-full w-full" />
+              </div>
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#171310] via-transparent to-transparent" />
+
+              <div className="absolute left-4 top-4 font-mono text-[10px] uppercase tracking-[0.24em] text-brand-soft/80">
+                live traffic network
+              </div>
+              <div className="absolute inset-x-4 bottom-4 flex items-end justify-between">
+                <div>
+                  <div className="stat-num text-2xl text-white">{liveLoading ? '—' : liveSources || '0'}</div>
+                  <div className="label mt-0.5 !font-mono !text-[9px]">sources watched</div>
+                </div>
+                <div className="text-right">
+                  <div className={`stat-num text-2xl ${liveBots > 0 ? 'text-bad' : 'text-safe'}`}>{liveLoading ? '—' : liveBots}</div>
+                  <div className="label mt-0.5 !font-mono !text-[9px]">bots flagged</div>
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="grid shrink-0 grid-cols-2 gap-3">
-            <Stat acc={acc} label="Premium" value={cents(quote.gross_premium_usd)} sub="per analyzed call" />
-            <Stat acc={acc} label="Covered limit" value={quote.per_incident_limit_usd ? `$${Number(quote.per_incident_limit_usd).toLocaleString('en-US')}` : '—'} sub="per incident" />
-          </div>
+          </Reveal>
         </div>
-      </div>
+
+        <GoldRule className="relative mt-8" />
+
+        {/* ---- live vitals band ---- */}
+        <Stagger className="relative mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-card border border-line bg-line/60 sm:grid-cols-4" gap={0.07}>
+          <HeroStat big={cents(quote.gross_premium_usd)} label="premium / call" />
+          <HeroStat big={coveredLimit} label="covered / incident" accent />
+          <HeroStat big={liveLoading ? '—' : liveSources || '0'} label="sources watched" />
+          <HeroStat big={liveLoading ? '—' : liveBots} label="bots auto-blocked" />
+        </Stagger>
+      </Reveal>
 
       {/* =============================================== AUTO-PILOT */}
-      <div className="card relative overflow-hidden p-5 sm:p-6">
-        <div className="mesh" style={{ top: '-70px', left: '30%', height: 180, width: 260, background: acc.fill }} />
+      <Reveal as="div" className="card relative overflow-hidden p-5 shadow-glow sm:p-6">
+        <div className="mesh" style={{ top: '-70px', left: '30%', height: 180, width: 260, background: brand.fill }} />
         <div className="relative flex flex-wrap items-center justify-between gap-4">
           <div className="min-w-0">
-            <div className={`eyebrow mb-1 ${acc.text}`}>⚡ Autonomous defense</div>
-            <h3 className="font-display text-xl tracking-tightish text-white">Let Vanta handle it</h3>
-            <p className="mt-1 max-w-xl text-sm text-slate-400">
+            <div className="eyebrow mb-1 !font-mono text-brand-soft">⚡ Autonomous defense</div>
+            <h3 className="font-display text-2xl tracking-tightish text-white">Let Vanta handle it</h3>
+            <p className="mt-1.5 max-w-xl text-sm leading-relaxed text-slate-400">
               One tap, zero clicks after: Vanta reads your live traffic, blocks every bot it finds, and enforces the mitigations — hands-off.
             </p>
           </div>
-          <button onClick={runAutopilot} disabled={apRunning} className="btn-primary shrink-0">
+          <Tactile onClick={runAutopilot} disabled={apRunning} className="btn-primary shrink-0">
             {apRunning ? (
               <><span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-950/40 border-t-ink-950" /> Auto-pilot running…</>
             ) : (
               <>⚡ Engage auto-pilot</>
             )}
-          </button>
+          </Tactile>
         </div>
 
         {(apSteps.length > 0 || apResult) && (
@@ -457,56 +523,64 @@ export default function VantaPage({ agentId, agent = {}, customer = {}, agentNam
                   {s.status === 'done' ? (
                     <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-safe/15 text-safe"><CheckIcon className="h-3 w-3" /></span>
                   ) : (
-                    <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-line border-t-warn" />
+                    <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-line border-t-brand" />
                   )}
                   <span className={s.status === 'done' ? 'text-slate-400' : 'text-slate-200'}>{s.text}</span>
                 </li>
               ))}
             </ol>
 
-            {apResult && !apResult.error && (
-              <div className="mt-4 animate-fade-up rounded-xl border border-safe/40 bg-safe/5 p-4">
-                <div className="flex items-center gap-2 text-safe">
-                  <span className="grid h-6 w-6 place-items-center rounded-full bg-safe/20"><CheckIcon className="h-4 w-4" /></span>
-                  <span className="font-display text-lg">Vanta is now auto-blocking {apResult.count} {apResult.count === 1 ? 'source' : 'sources'}.</span>
-                </div>
-                <p className="mt-1.5 text-sm text-slate-300">{apResult.exec?.summary || 'Mitigations applied and flagged sources blocked.'}</p>
-                {apResult.exec?.steps?.length > 0 && (
-                  <ul className="mt-2 space-y-1">
-                    {apResult.exec.steps.map((s, i) => (
-                      <li key={i} className="flex items-center gap-2 text-xs text-slate-400"><CheckIcon className="h-3 w-3 text-safe" /> {s}</li>
-                    ))}
-                  </ul>
-                )}
-                {apResult.exec?.confirmation && <div className="mt-2 font-mono text-[11px] text-slate-500">confirmation {apResult.exec.confirmation}</div>}
-              </div>
-            )}
+            <AnimatePresence>
+              {apResult && !apResult.error && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                  className="mt-4 rounded-xl border border-safe/40 bg-safe/5 p-4"
+                >
+                  <div className="flex items-center gap-2 text-safe">
+                    <span className="grid h-6 w-6 place-items-center rounded-full bg-safe/20"><CheckIcon className="h-4 w-4" /></span>
+                    <span className="font-display text-lg">Vanta is now auto-blocking {apResult.count} {apResult.count === 1 ? 'source' : 'sources'}.</span>
+                  </div>
+                  <p className="mt-1.5 text-sm text-slate-300">{apResult.exec?.summary || 'Mitigations applied and flagged sources blocked.'}</p>
+                  {apResult.exec?.steps?.length > 0 && (
+                    <ul className="mt-2 space-y-1">
+                      {apResult.exec.steps.map((s, i) => (
+                        <li key={i} className="flex items-center gap-2 text-xs text-slate-400"><CheckIcon className="h-3 w-3 text-safe" /> {s}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {apResult.exec?.confirmation && <div className="mt-2 font-mono text-[11px] text-slate-500">confirmation {apResult.exec.confirmation}</div>}
+                </motion.div>
+              )}
+            </AnimatePresence>
             {apResult?.error && <div className="mt-4 rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-xs text-bad">{apResult.error}</div>}
           </div>
         )}
-      </div>
+      </Reveal>
 
       {/* =============================================== LIVE MONITOR + TRAFFIC MIX */}
-      <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
+      <Reveal as="div" className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
         <WidgetShell
           title="Live traffic monitor"
           subtitle="Vanta continuously samples and classifies your current traffic window — no input needed."
-          acc={agent.accent || 'warn'}
-          eyebrow={refreshing ? 'Scanning…' : 'Live'}
+          acc="brand"
+          eyebrow={refreshing ? 'Scanning…' : 'Live · NOC'}
           live
           right={
             <div className="flex items-center gap-3">
-              {lastTick && !refreshing && <span className="text-[11px] text-slate-600">updated {timeAgo(lastTick)}</span>}
+              {lastTick && !refreshing && <span className="font-mono text-[11px] text-slate-600">updated {timeAgo(lastTick)}</span>}
               <button
                 type="button"
                 onClick={() => setAutoRefresh((v) => !v)}
-                className={`chip !px-2.5 !py-1 text-[11px] ${autoRefresh ? 'border-safe/30 bg-safe/10 text-safe' : 'text-slate-400'}`}
+                className={`chip !px-2.5 !py-1 font-mono text-[11px] ${autoRefresh ? 'border-safe/30 bg-safe/10 text-safe' : 'text-slate-400'}`}
                 title="Toggle continuous monitoring"
               >
                 <span className={`h-1.5 w-1.5 rounded-full ${autoRefresh ? 'bg-safe animate-pulse' : 'bg-slate-600'}`} />
                 {autoRefresh ? 'Auto-refresh on' : 'Auto-refresh off'}
               </button>
-              <button type="button" onClick={fetchLive} disabled={refreshing} className="text-xs text-slate-500 hover:text-white disabled:opacity-50">
+              <button type="button" onClick={fetchLive} disabled={refreshing} className="text-xs text-slate-500 transition-colors hover:text-white disabled:opacity-50">
                 refresh now
               </button>
             </div>
@@ -517,13 +591,20 @@ export default function VantaPage({ agentId, agent = {}, customer = {}, agentNam
             <WatchingSkeleton />
           ) : (
             <div className={`animate-fade-up ${refreshing ? 'opacity-70 transition-opacity' : ''}`}>
+              {/* NOC vitals rail */}
+              <div className="mb-5 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line/50 sm:grid-cols-4">
+                <NocStat label="sources" value={liveSources} />
+                <NocStat label="bots" value={liveBots} tone={liveBots > 0 ? 'bad' : 'safe'} />
+                <NocStat label="suspect" value={liveSuspect} tone={liveSuspect > 0 ? 'warn' : 'slate'} />
+                <NocStat label="status" value={autoRefresh ? 'LIVE' : 'PAUSED'} tone={autoRefresh ? 'safe' : 'slate'} />
+              </div>
               <AnalysisBody a={live} onBlock={addConfirmed} blockedIds={blockedIds} />
             </div>
           )}
         </WidgetShell>
 
         {/* TRAFFIC MIX chart */}
-        <WidgetShell title="Traffic mix" subtitle="Human vs suspect vs bot in the current window." acc={agent.accent || 'warn'} eyebrow="Live composition" live={autoRefresh}>
+        <WidgetShell title="Traffic mix" subtitle="Human vs suspect vs bot in the current window." acc="brand" eyebrow="Live composition" live={autoRefresh}>
           {chartData.length === 0 ? (
             <div className="grid h-56 place-items-center text-center text-sm text-slate-600">Reading the live window…</div>
           ) : (
@@ -531,13 +612,13 @@ export default function VantaPage({ agentId, agent = {}, customer = {}, agentNam
               <div className="h-56 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chartData} margin={{ top: 10, right: 10, left: -14, bottom: 0 }}>
-                    <CartesianGrid stroke="#242b3b" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fill: '#64748b', fontSize: 11 }} stroke="#242b3b" />
-                    <YAxis tick={{ fill: '#64748b', fontSize: 11 }} stroke="#242b3b" />
+                    <CartesianGrid stroke={WARM_LINE} vertical={false} />
+                    <XAxis dataKey="label" tick={{ fill: '#8a7d73', fontSize: 11 }} stroke={WARM_LINE} />
+                    <YAxis tick={{ fill: '#8a7d73', fontSize: 11 }} stroke={WARM_LINE} />
                     <Tooltip
-                      cursor={{ fill: 'rgba(255,255,255,0.03)' }}
-                      contentStyle={{ background: '#0E121B', border: '1px solid #242b3b', borderRadius: 12, color: '#fff' }}
-                      labelStyle={{ color: '#94a3b8' }}
+                      cursor={{ fill: 'rgba(196,85,45,0.06)' }}
+                      contentStyle={{ background: '#171310', border: `1px solid ${WARM_LINE}`, borderRadius: 12, color: '#fff' }}
+                      labelStyle={{ color: '#b8a99d' }}
                       formatter={(v, _n, p) => [`${v}%`, p?.payload?.label]}
                     />
                     <Bar dataKey="pct" radius={[6, 6, 0, 0]} isAnimationActive={false}>
@@ -554,7 +635,7 @@ export default function VantaPage({ agentId, agent = {}, customer = {}, agentNam
                   return (
                     <div key={i}>
                       <div className={`stat-num text-xl ${c.text}`}>{d.pct}%</div>
-                      <div className="label mt-0.5">{d.label}</div>
+                      <div className="label mt-0.5 !font-mono">{d.label}</div>
                     </div>
                   )
                 })}
@@ -562,17 +643,17 @@ export default function VantaPage({ agentId, agent = {}, customer = {}, agentNam
             </>
           )}
         </WidgetShell>
-      </div>
+      </Reveal>
 
       {/* =============================================== BLOCKLIST + FINGERPRINT */}
-      <div className="grid gap-6 lg:grid-cols-2">
+      <Reveal as="div" className="grid gap-6 lg:grid-cols-2">
         {/* BLOCKLIST */}
         <WidgetShell
           title="Auto-blocklist"
           subtitle="Vanta proposes every client it flags as a bot. Confirm to block, or undo to let it through."
-          acc={agent.accent || 'warn'}
+          acc="brand"
           eyebrow="Mitigation"
-          right={<span className="chip !px-2 !py-0.5 text-[10px] text-slate-400">{proposedCount} proposed · {blocklist.length - proposedCount} confirmed</span>}
+          right={<span className="chip !px-2 !py-0.5 font-mono text-[10px] text-slate-400">{proposedCount} proposed · {blocklist.length - proposedCount} confirmed</span>}
         >
           <div className="flex gap-2">
             <input
@@ -582,7 +663,7 @@ export default function VantaPage({ agentId, agent = {}, customer = {}, agentNam
               onChange={(e) => setBlockInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') { addConfirmed(blockInput); setBlockInput('') } }}
             />
-            <button onClick={() => { addConfirmed(blockInput); setBlockInput('') }} disabled={!blockInput.trim()} className="btn-ghost whitespace-nowrap !py-2 text-sm">Block</button>
+            <Tactile onClick={() => { addConfirmed(blockInput); setBlockInput('') }} disabled={!blockInput.trim()} className="btn-ghost whitespace-nowrap !py-2 text-sm">Block</Tactile>
           </div>
           <div className="mt-4">
             {blocklist.length === 0 ? (
@@ -596,11 +677,11 @@ export default function VantaPage({ agentId, agent = {}, customer = {}, agentNam
                       <span className="flex min-w-0 items-center gap-2">
                         <LockIcon className={`h-3.5 w-3.5 shrink-0 ${proposed ? 'text-warn' : 'text-bad'}`} />
                         <span className="truncate font-mono text-xs text-slate-200">{b.id}</span>
-                        <span className={`chip !px-1.5 !py-0 text-[9px] ${proposed ? 'border-warn/30 text-warn' : 'text-slate-500'}`}>{proposed ? 'proposed' : 'blocked'}</span>
+                        <span className={`chip !px-1.5 !py-0 font-mono text-[9px] ${proposed ? 'border-warn/30 text-warn' : 'text-slate-500'}`}>{proposed ? 'proposed' : 'blocked'}</span>
                       </span>
                       <span className="flex shrink-0 items-center gap-3">
                         {proposed && <button onClick={() => confirmEntry(b.id)} className="text-xs text-safe hover:underline">confirm</button>}
-                        <button onClick={() => removeEntry(b.id)} className="text-xs text-slate-400 hover:text-white">{proposed ? 'undo' : 'remove'}</button>
+                        <button onClick={() => removeEntry(b.id)} className="text-xs text-slate-400 transition-colors hover:text-white">{proposed ? 'undo' : 'remove'}</button>
                       </span>
                     </div>
                   )
@@ -611,13 +692,13 @@ export default function VantaPage({ agentId, agent = {}, customer = {}, agentNam
 
           {blocklist.length > 0 && (
             <div className="mt-4 border-t border-line/70 pt-4">
-              <button onClick={enforceAll} disabled={enfBusy} className="btn-primary w-full !py-2 text-sm">
+              <Tactile onClick={enforceAll} disabled={enfBusy} className="btn-primary w-full !py-2 text-sm">
                 {enfBusy ? (
                   <><span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-950/40 border-t-ink-950" /> Enforcing…</>
                 ) : (
                   <><LockIcon className="h-4 w-4" /> Enforce all blocks</>
                 )}
-              </button>
+              </Tactile>
               {enfErr && <div className="mt-3 rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-xs text-bad">{enfErr}</div>}
               {enfResult && (
                 <div className="mt-3 animate-fade-up rounded-xl border border-safe/40 bg-safe/5 p-4">
@@ -641,16 +722,16 @@ export default function VantaPage({ agentId, agent = {}, customer = {}, agentNam
         </WidgetShell>
 
         {/* LIVE FINGERPRINT */}
-        <WidgetShell title="Live fingerprint" subtitle="One request in, one verdict out — paste a user-agent (plus IP / behaviour) for an instant call." acc={agent.accent || 'warn'} eyebrow="Single request">
+        <WidgetShell title="Live fingerprint" subtitle="One request in, one verdict out — paste a user-agent (plus IP / behaviour) for an instant call." acc="brand" eyebrow="Single request">
           <div className="space-y-2.5">
             <input className="inp text-sm" placeholder='User-Agent  e.g. "python-requests/2.28" or a real browser UA' value={fp.user_agent} onChange={(e) => setFp({ ...fp, user_agent: e.target.value })} />
             <div className="grid grid-cols-2 gap-2.5">
               <input className="inp text-sm" placeholder="IP (optional)" value={fp.ip} onChange={(e) => setFp({ ...fp, ip: e.target.value })} />
               <input className="inp text-sm" placeholder="Behaviour (optional)" value={fp.behavior} onChange={(e) => setFp({ ...fp, behavior: e.target.value })} />
             </div>
-            <button onClick={runFingerprint} disabled={fpBusy || !fp.user_agent.trim()} className="btn-ghost !py-2 text-sm">
+            <Tactile onClick={runFingerprint} disabled={fpBusy || !fp.user_agent.trim()} className="btn-ghost !py-2 text-sm">
               {fpBusy ? 'Fingerprinting…' : 'Fingerprint request'}
-            </button>
+            </Tactile>
           </div>
           {fpErr && <div className="mt-3 rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-xs text-bad">{fpErr}</div>}
           {fpRes && (() => {
@@ -658,7 +739,7 @@ export default function VantaPage({ agentId, agent = {}, customer = {}, agentNam
             return (
               <div className={`mt-4 animate-fade-up rounded-xl border p-4 ${c.chip}`}>
                 <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-2 text-lg font-semibold">
+                  <span className="flex items-center gap-2 font-display text-xl font-semibold">
                     {fpRes.classification === 'bot' ? <XIcon className="h-4 w-4" /> : fpRes.classification === 'human' ? <CheckIcon className="h-4 w-4" /> : null}
                     {c.label}
                   </span>
@@ -670,7 +751,7 @@ export default function VantaPage({ agentId, agent = {}, customer = {}, agentNam
                   </ul>
                 )}
                 {fpRes.classification !== 'human' && (
-                  <button onClick={() => addConfirmed(fpRes.echo?.ip || fpRes.echo?.user_agent, (fpRes.reasons || [])[0])} className="mt-3 text-xs underline hover:text-white">
+                  <button onClick={() => addConfirmed(fpRes.echo?.ip || fpRes.echo?.user_agent, (fpRes.reasons || [])[0])} className="mt-3 text-xs underline transition-colors hover:text-white">
                     add to blocklist
                   </button>
                 )}
@@ -678,67 +759,71 @@ export default function VantaPage({ agentId, agent = {}, customer = {}, agentNam
             )
           })()}
         </WidgetShell>
-      </div>
+      </Reveal>
 
       {/* =============================================== SECONDARY: ANALYZE YOUR OWN LOGS */}
-      <WidgetShell
-        title="Analyze your own logs"
-        subtitle="Already have access logs or a signup dump? Paste them and Vanta runs the same analysis on demand."
-        acc={agent.accent || 'warn'}
-        eyebrow="On demand"
-        right={<button type="button" onClick={() => setLogs(SAMPLE_LOGS)} className="text-xs text-slate-500 hover:text-white">load sample</button>}
-      >
-        <textarea
-          value={logs}
-          onChange={(e) => setLogs(e.target.value)}
-          placeholder={'185.220.101.5 GET /login UA="python-requests/2.28"\n45.9.148.3 POST /signup email=a9f3@mailinator.com ...'}
-          className="inp h-32 resize-y font-mono text-xs leading-relaxed"
-        />
-        <div className="mt-3 flex items-center gap-3">
-          <button onClick={runAnalyze} disabled={mBusy || !logs.trim()} className="btn-ghost !py-2 text-sm">
-            {mBusy ? 'Scanning…' : 'Analyze these logs'}
-          </button>
-          {manual && <span className="text-xs text-slate-500">{(manual.entities || []).length} clients classified</span>}
-        </div>
-        {mErr && <div className="mt-3 rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-xs text-bad">{mErr}</div>}
-        {manual && <div className="mt-5 animate-fade-up"><AnalysisBody a={manual} onBlock={addConfirmed} blockedIds={blockedIds} /></div>}
-      </WidgetShell>
+      <Reveal as="div">
+        <WidgetShell
+          title="Analyze your own logs"
+          subtitle="Already have access logs or a signup dump? Paste them and Vanta runs the same analysis on demand."
+          acc="brand"
+          eyebrow="On demand"
+          right={<button type="button" onClick={() => setLogs(SAMPLE_LOGS)} className="font-mono text-xs text-slate-500 transition-colors hover:text-white">load sample</button>}
+        >
+          <textarea
+            value={logs}
+            onChange={(e) => setLogs(e.target.value)}
+            placeholder={'185.220.101.5 GET /login UA="python-requests/2.28"\n45.9.148.3 POST /signup email=a9f3@mailinator.com ...'}
+            className="inp h-32 resize-y font-mono text-xs leading-relaxed"
+          />
+          <div className="mt-3 flex items-center gap-3">
+            <Tactile onClick={runAnalyze} disabled={mBusy || !logs.trim()} className="btn-ghost !py-2 text-sm">
+              {mBusy ? 'Scanning…' : 'Analyze these logs'}
+            </Tactile>
+            {manual && <span className="font-mono text-xs text-slate-500">{(manual.entities || []).length} clients classified</span>}
+          </div>
+          {mErr && <div className="mt-3 rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-xs text-bad">{mErr}</div>}
+          {manual && <div className="mt-5 animate-fade-up"><AnalysisBody a={manual} onBlock={addConfirmed} blockedIds={blockedIds} /></div>}
+        </WidgetShell>
+      </Reveal>
 
       {/* =============================================== ASK VANTA (freeform) */}
-      <WidgetShell title={`Ask ${name}`} subtitle="Anything the tools above don't cover — Vanta runs its live tool-use loop and shows every step and its report." acc={agent.accent || 'warn'} eyebrow="Agent task">
-        <div className="flex gap-2">
-          <input
-            className="inp text-sm"
-            placeholder="e.g. Which paths are being scraped and what rate limits should I set?"
-            value={task}
-            onChange={(e) => setTask(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') runAsk() }}
-          />
-          <button onClick={runAsk} disabled={askBusy || !task.trim()} className="btn-primary whitespace-nowrap !py-2 text-sm">
-            {askBusy ? 'Working…' : 'Run'}
-          </button>
-        </div>
-        {askErr && <div className="mt-3 rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-xs text-bad">{askErr}</div>}
-        {askBusy && !askRun && <div className="mt-4 text-sm text-slate-500">Vanta is working through the request…</div>}
-        {askRun && (
-          <div className="mt-4 rounded-xl border border-line bg-ink-900/40 p-4">
-            <RunTimeline run={askRun} agent={name} />
+      <Reveal as="div">
+        <WidgetShell title={`Ask ${name}`} subtitle="Anything the tools above don't cover — Vanta runs its live tool-use loop and shows every step and its report." acc="brand" eyebrow="Agent task">
+          <div className="flex gap-2">
+            <input
+              className="inp text-sm"
+              placeholder="e.g. Which paths are being scraped and what rate limits should I set?"
+              value={task}
+              onChange={(e) => setTask(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') runAsk() }}
+            />
+            <Tactile onClick={runAsk} disabled={askBusy || !task.trim()} className="btn-primary whitespace-nowrap !py-2 text-sm">
+              {askBusy ? 'Working…' : 'Run'}
+            </Tactile>
           </div>
-        )}
-      </WidgetShell>
+          {askErr && <div className="mt-3 rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-xs text-bad">{askErr}</div>}
+          {askBusy && !askRun && <div className="mt-4 text-sm text-slate-500">Vanta is working through the request…</div>}
+          {askRun && (
+            <div className="mt-4 rounded-xl border border-line bg-ink-900/40 p-4">
+              <RunTimeline run={askRun} agent={name} />
+            </div>
+          )}
+        </WidgetShell>
+      </Reveal>
 
       {/* =============================================== ACTIVITY + INSURANCE */}
-      <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
-        <WidgetShell title="Activity" subtitle="Everything Vanta has run on your account." acc={agent.accent || 'warn'} eyebrow="History">
+      <Reveal as="div" className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
+        <WidgetShell title="Activity" subtitle="Everything Vanta has run on your account." acc="brand" eyebrow="History">
           {runs.length === 0 ? (
             <p className="text-sm text-slate-500">No runs yet. Vanta is monitoring in the background — ask it a question to log a run.</p>
           ) : (
             <div className="space-y-5">
               {[...runs].reverse().map((run, i) => (
                 <div key={i} className="rounded-xl border border-line bg-ink-900/40 p-4">
-                  <div className="mb-2 flex items-center justify-between text-xs text-slate-500">
+                  <div className="mb-2 flex items-center justify-between font-mono text-xs text-slate-500">
                     <span>{run.agent_name || run.agent || name}</span>
-                    <span className="font-mono">{(run.ts || '').slice(0, 16).replace('T', ' ')}</span>
+                    <span>{(run.ts || '').slice(0, 16).replace('T', ' ')}</span>
                   </div>
                   <RunTimeline run={run} agent={run.agent_name || run.agent || name} />
                 </div>
@@ -759,31 +844,41 @@ export default function VantaPage({ agentId, agent = {}, customer = {}, agentNam
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-xl border border-line bg-ink-900/40 p-4">
-                <div className="stat-num text-xl text-safe">{quote.per_incident_limit_usd ? `$${Number(quote.per_incident_limit_usd).toLocaleString('en-US')}` : '—'}</div>
-                <div className="label mt-1">Per-incident limit</div>
+                <div className="stat-num text-xl text-safe">{coveredLimit}</div>
+                <div className="label mt-1 !font-mono">Per-incident limit</div>
               </div>
               <div className="rounded-xl border border-line bg-ink-900/40 p-4">
                 <div className="stat-num text-xl text-white">{cents(quote.gross_premium_usd)}</div>
-                <div className="label mt-1">Premium / call</div>
+                <div className="label mt-1 !font-mono">Premium / call</div>
               </div>
             </div>
-            <a href="/claims" className="btn-ghost w-full justify-between !py-2.5 text-sm">
+            <Tactile as="a" href="/claims" className="btn-ghost flex w-full items-center justify-between !py-2.5 text-sm">
               File or track a claim <ArrowIcon className="h-4 w-4" />
-            </a>
+            </Tactile>
           </div>
         </WidgetShell>
-      </div>
+      </Reveal>
     </div>
   )
 }
 
 /* ------------------------------------------------------------------ bits */
-function Stat({ acc, label, value, sub }) {
+function HeroStat({ big, label, accent }) {
   return (
-    <div className="rounded-xl border border-line bg-ink-900/40 px-4 py-3">
-      <div className={`stat-num text-2xl ${acc.text}`}>{value}</div>
-      <div className="label mt-1">{label}</div>
-      {sub && <div className="mt-0.5 text-[10px] text-slate-600">{sub}</div>}
+    <motion.div variants={stagItem} className="bg-ink-900/80 px-4 py-5 text-center">
+      <div className={`stat-num text-2xl md:text-3xl ${accent ? 'text-gold' : 'text-white'}`}>{big}</div>
+      <div className="label mt-1 !font-mono !tracking-[0.12em]">{label}</div>
+    </motion.div>
+  )
+}
+
+function NocStat({ label, value, tone = 'white' }) {
+  const c =
+    tone === 'bad' ? 'text-bad' : tone === 'safe' ? 'text-safe' : tone === 'warn' ? 'text-warn' : tone === 'slate' ? 'text-slate-400' : 'text-white'
+  return (
+    <div className="bg-ink-900/70 px-3 py-2.5">
+      <div className={`font-mono text-lg font-semibold tabular-nums ${c}`}>{value}</div>
+      <div className="label mt-0.5 !font-mono !text-[9px] !tracking-[0.14em]">{label}</div>
     </div>
   )
 }
@@ -793,8 +888,8 @@ function WatchingSkeleton() {
     <div className="animate-fade-in">
       <div className="flex items-center gap-2 text-sm text-slate-400">
         <span className="relative flex h-2.5 w-2.5">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warn opacity-70" />
-          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-warn" />
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand opacity-70" />
+          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-brand" />
         </span>
         Vanta is watching your traffic…
       </div>

@@ -15,7 +15,7 @@ export function StatCards({ section, customer, agentRecord }) {
         {items.map((it, i) => {
           const raw = it.source != null ? resolveSource(customer, it.source, agentRecord) : it.value
           return (
-            <div key={i} className="rounded-xl border border-line bg-ink-900/40 p-4">
+            <div key={i} className="group relative overflow-hidden rounded-xl border border-line bg-ink-900/40 p-4 transition-colors hover:border-brand/30">
               <div className={`stat-num text-2xl ${t.text}`}>{fmt(raw, it.format)}</div>
               <div className="label mt-1">{it.label}</div>
               {it.sub && <div className="mt-0.5 text-[10px] text-slate-600">{it.sub}</div>}
@@ -117,18 +117,18 @@ export function Chart({ section, customer, agentRecord }) {
           <ResponsiveContainer width="100%" height="100%">
             {p.kind === 'bar' ? (
               <BarChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                <CartesianGrid stroke="#242b3b" vertical={false} />
-                <XAxis dataKey="_x" tick={{ fill: '#64748b', fontSize: 11 }} stroke="#242b3b" />
-                <YAxis tick={{ fill: '#64748b', fontSize: 11 }} stroke="#242b3b" />
-                <Tooltip contentStyle={{ background: '#0E121B', border: '1px solid #242b3b', borderRadius: 12, color: '#fff' }} labelStyle={{ color: '#94a3b8' }} />
+                <CartesianGrid stroke="#3a342f" vertical={false} />
+                <XAxis dataKey="_x" tick={{ fill: '#8b8a87', fontSize: 11 }} stroke="#3a342f" />
+                <YAxis tick={{ fill: '#8b8a87', fontSize: 11 }} stroke="#3a342f" />
+                <Tooltip contentStyle={{ background: '#171310', border: '1px solid #3a342f', borderRadius: 12, color: '#f1f0ef' }} labelStyle={{ color: '#8b8a87' }} cursor={{ fill: 'rgba(196,85,45,0.06)' }} />
                 <Bar dataKey="_y" name={p.label || y} fill={t.stroke} radius={[6, 6, 0, 0]} />
               </BarChart>
             ) : (
               <LineChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                <CartesianGrid stroke="#242b3b" vertical={false} />
-                <XAxis dataKey="_x" tick={{ fill: '#64748b', fontSize: 11 }} stroke="#242b3b" />
-                <YAxis tick={{ fill: '#64748b', fontSize: 11 }} stroke="#242b3b" />
-                <Tooltip contentStyle={{ background: '#0E121B', border: '1px solid #242b3b', borderRadius: 12, color: '#fff' }} labelStyle={{ color: '#94a3b8' }} />
+                <CartesianGrid stroke="#3a342f" vertical={false} />
+                <XAxis dataKey="_x" tick={{ fill: '#8b8a87', fontSize: 11 }} stroke="#3a342f" />
+                <YAxis tick={{ fill: '#8b8a87', fontSize: 11 }} stroke="#3a342f" />
+                <Tooltip contentStyle={{ background: '#171310', border: '1px solid #3a342f', borderRadius: 12, color: '#f1f0ef' }} labelStyle={{ color: '#8b8a87' }} cursor={{ fill: 'rgba(196,85,45,0.06)' }} />
                 <Line type="monotone" dataKey="_y" name={p.label || y} stroke={t.stroke} strokeWidth={2.4} dot={{ r: 3, fill: t.stroke }} />
               </LineChart>
             )}

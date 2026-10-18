@@ -175,20 +175,21 @@ export default function ConciergeChat({ schema, agents = [], activeAgentId, agen
       {!open && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3">
           {/* tiny "Ask {agentName}" label, hidden on very small screens */}
-          <span className="hidden select-none rounded-full border border-line bg-ink-900/85 px-3 py-1.5 text-xs font-medium text-slate-300 shadow-lg backdrop-blur sm:inline-flex">
-            Ask {agentName || 'your concierge'}
+          <span className="hidden select-none items-center gap-1.5 rounded-full border border-line bg-ink-900/85 px-3 py-1.5 text-xs font-medium text-slate-300 shadow-float backdrop-blur-xl sm:inline-flex">
+            Ask <span className="handwriting text-brand-soft">{agentName || 'your concierge'}</span>
           </span>
           <button
             type="button"
             onClick={() => setOpen(true)}
             aria-label={`Open ${agentName || 'concierge'} chat`}
-            className="group relative grid h-14 w-14 place-items-center rounded-full text-ink-950 shadow-glow outline-none transition-transform duration-300 hover:scale-105 focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950"
+            className="group relative grid h-14 w-14 place-items-center rounded-full text-ink-950 shadow-glow outline-none transition-transform duration-300 ease-out-back hover:scale-110 active:scale-95 focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950"
           >
             {/* pulse ring */}
-            <span className="absolute inset-0 rounded-full bg-gold-sheen animate-pulse-ring" aria-hidden />
-            {/* gold gradient face */}
-            <span className="absolute inset-0 rounded-full bg-gold-sheen" aria-hidden />
-            <span className="relative drop-shadow-sm">{launcherIcon}</span>
+            <span className="absolute inset-0 rounded-full bg-mocha-sheen animate-pulse-ring" aria-hidden />
+            {/* mocha gradient face + specular sweep */}
+            <span className="absolute inset-0 rounded-full bg-mocha-sheen" aria-hidden />
+            <span className="absolute inset-0 overflow-hidden rounded-full glass-sweep" aria-hidden />
+            <span className="relative drop-shadow-sm transition-transform duration-300 group-hover:rotate-[6deg]">{launcherIcon}</span>
           </button>
         </div>
       )}
@@ -216,12 +217,15 @@ export default function ConciergeChat({ schema, agents = [], activeAgentId, agen
             <div className="relative flex flex-col gap-3 border-b border-line/80 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className={`grid h-10 w-10 place-items-center rounded-xl border ${t.border} ${t.bg} ${t.text}`}>
+                  <div className={`grid h-10 w-10 place-items-center rounded-xl border ${t.border} ${t.bg} ${t.text} shadow-glow`}>
                     <ShieldIcon className="h-5 w-5" />
                   </div>
                   <div>
-                    <div className="font-display text-lg leading-tight text-white">Concierge</div>
-                    <div className="label">{agentName ? `operating ${agentName}` : 'your account assistant'}</div>
+                    <div className="font-display text-xl leading-tight tracking-tightish text-white">Concierge</div>
+                    <div className="eyebrow mt-0.5">
+                      <span className="relative flex h-1.5 w-1.5"><span className={`absolute inline-flex h-full w-full animate-ping rounded-full ${t.dot} opacity-60`} /><span className={`relative inline-flex h-1.5 w-1.5 rounded-full ${t.dot}`} /></span>
+                      {agentName ? `operating ${agentName}` : 'your account assistant'}
+                    </div>
                   </div>
                 </div>
                 <button

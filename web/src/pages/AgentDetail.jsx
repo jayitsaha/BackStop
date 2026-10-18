@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import api from '../api'
 import { useAsync } from '../lib/useAsync'
 import { Loading, ErrorNote } from '../components/states'
 import { VerifiedMark, GradePill, ProtectedMark, GradeBadge, ArrowIcon, CheckIcon, XIcon, ShieldIcon } from '../components/marks'
 import { AGENT_BLURB, TEST_TITLES, CATEGORY_OF, shortTestId, cents, usd, oneIn, gradeTheme } from '../lib/format'
 import CrashTestLab from '../components/CrashTestLab.jsx'
+import { Reveal, Stagger, stagItem, Tactile } from '../components/ui/motion.jsx'
+import { GlowBackdrop, GoldRule } from '../components/ui/Backdrop.jsx'
 
 export default function AgentDetail() {
   const { id } = useParams()
@@ -28,62 +31,76 @@ export default function AgentDetail() {
   const isLive = data.kind === 'llm'
 
   return (
-    <div className="space-y-8">
-      <Link to="/" className="inline-flex items-center gap-1 text-sm text-slate-400 hover:text-white">
-        <ArrowIcon className="h-4 w-4 rotate-180" /> Marketplace
-      </Link>
+    <div className="space-y-10">
+      <Reveal y={10}>
+        <Tactile as={Link} to="/" className="inline-flex items-center gap-1.5 text-sm text-slate-400 transition-colors hover:text-white">
+          <ArrowIcon className="h-4 w-4 rotate-180" /> Marketplace
+        </Tactile>
+      </Reveal>
 
-      {/* header */}
-      <div className="card relative overflow-hidden p-7 md:p-9">
-        <div className={`pointer-events-none absolute -right-16 -top-20 h-72 w-72 rounded-full blur-3xl`} style={{ background: `${t.hex}22` }} />
-        <div className="relative flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="font-display text-4xl font-semibold text-white">{name}</h1>
-              <span className="text-slate-500">· {blurb.developer || data.developer}</span>
-            </div>
-            <p className="mt-2 max-w-xl text-slate-400">{blurb.tagline}</p>
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              {data.identity?.agent_id && <VerifiedMark />}
-              <GradePill grade={g.grade} score={g.score} />
-              <ProtectedMark quote={q} />
-            </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              {isLive ? (
-                <span className="chip border-brand/30 bg-brand/10 text-brand-soft">live LLM · {data.model}</span>
-              ) : (
-                <span className="chip">deterministic reference engine</span>
-              )}
-              {data.use_case_type && <span className="chip">{data.use_case_type}</span>}
-              {data.category && <span className="chip">{data.category}</span>}
-            </div>
-            {data.identity?.agent_id && (
-              <div className="mt-2 font-mono text-xs text-slate-600">
-                id {data.identity.agent_id} · v{data.identity.version} · code {data.identity.code_hash?.slice(0, 10)} · sig {data.identity.signature?.slice(0, 10)}…
+      {/* editorial hero */}
+      <Reveal y={22}>
+        <div className="card-raised relative overflow-hidden p-7 md:p-11">
+          <GlowBackdrop intensity={0.85} />
+          <div className="mesh" style={{ top: '-22%', right: '-8%', height: 360, width: 360, background: `${t.hex}26` }} />
+          <div className="relative flex flex-col gap-8 md:flex-row md:items-start md:justify-between">
+            <div className="min-w-0">
+              <div className="eyebrow mb-4"><span className="h-2 w-2 rounded-full bg-brand" /> Agent profile</div>
+              <h1 className="font-display text-5xl font-semibold leading-[0.9] tracking-tighter2 text-white md:text-6xl">{name}</h1>
+              <p className="handwriting mt-3 text-lg text-brand-soft/90">by {blurb.developer || data.developer}</p>
+              <p className="mt-4 max-w-xl text-lg leading-relaxed text-slate-300">{blurb.tagline}</p>
+
+              <Stagger className="mt-6 flex flex-wrap items-center gap-2" gap={0.05}>
+                {data.identity?.agent_id && <motion.span variants={stagItem}><VerifiedMark /></motion.span>}
+                <motion.span variants={stagItem}><GradePill grade={g.grade} score={g.score} /></motion.span>
+                <motion.span variants={stagItem}><ProtectedMark quote={q} /></motion.span>
+              </Stagger>
+
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {isLive ? (
+                  <span className="chip border-brand/30 bg-brand/10 text-brand-soft">live LLM · {data.model}</span>
+                ) : (
+                  <span className="chip">deterministic reference engine</span>
+                )}
+                {data.use_case_type && <span className="chip">{data.use_case_type}</span>}
+                {data.category && <span className="chip">{data.category}</span>}
               </div>
-            )}
-          </div>
-          <div className="flex items-center gap-6">
-            <GradeBadge grade={g.grade} size="lg" />
-            <div className="hidden sm:block">
-              <Metric label="Crash score" value={g.score} sub={`${g.passed_tests}/${g.total_tests} tests`} />
-              <Metric label="Stability band" value={`${g.band[0]}–${g.band[1]}`} sub={g.unstable_tests?.length ? `${g.unstable_tests.length} unstable` : 'all stable'} className="mt-3" />
+
+              {data.identity?.agent_id && (
+                <div className="mt-5 max-w-lg">
+                  <GoldRule className="mb-3 opacity-60" />
+                  <div className="flex items-center gap-1.5 font-mono text-[11px] leading-relaxed text-slate-500">
+                    <ShieldIcon className="h-3.5 w-3.5 flex-none text-info/70" />
+                    <span className="truncate">id {data.identity.agent_id} · v{data.identity.version} · code {data.identity.code_hash?.slice(0, 10)} · sig {data.identity.signature?.slice(0, 10)}…</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-none items-center gap-6">
+              <GradeBadge grade={g.grade} size="lg" />
+              <div className="hidden sm:block">
+                <Metric label="Crash score" value={g.score} sub={`${g.passed_tests}/${g.total_tests} tests`} />
+                <Metric label="Stability band" value={`${g.band[0]}–${g.band[1]}`} sub={g.unstable_tests?.length ? `${g.unstable_tests.length} unstable` : 'all stable'} className="mt-4" />
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </Reveal>
 
       <div className="grid gap-8 lg:grid-cols-[1.55fr_1fr]">
         <div className="space-y-8">
-          <AboutAgent data={data} name={name} />
-          <CrashTestLab agentId={id} name={name} isLive={isLive} perTest={perTest} live={live} onLive={(tid, passed) => setLive((m) => ({ ...m, [tid]: passed }))} />
-          <RedTeam id={id} name={name} />
-          <ReplayGrid perTest={perTest} live={live} />
+          <Reveal y={20}><AboutAgent data={data} name={name} /></Reveal>
+          <Reveal y={20}>
+            <CrashTestLab agentId={id} name={name} isLive={isLive} perTest={perTest} live={live} onLive={(tid, passed) => setLive((m) => ({ ...m, [tid]: passed }))} />
+          </Reveal>
+          <Reveal y={20}><RedTeam id={id} name={name} /></Reveal>
+          <Reveal y={20}><ReplayGrid perTest={perTest} live={live} /></Reveal>
         </div>
         <div className="space-y-8">
-          <PolicyCard name={name} q={q} declined={declined} book={data.book_400k_payments} />
-          <Subscores subscores={data.subscores} />
-          <Coverage />
+          <Reveal y={20}><PolicyCard name={name} q={q} declined={declined} book={data.book_400k_payments} /></Reveal>
+          <Reveal y={20}><Subscores subscores={data.subscores} /></Reveal>
+          <Reveal y={20}><Coverage /></Reveal>
         </div>
       </div>
     </div>
@@ -100,22 +117,22 @@ function AboutAgent({ data, name }) {
   const hasAnything = data.description || caps.length || usage.length || inputs.length || outputs.length
   if (!hasAnything) return null
   return (
-    <div className="card p-6 md:p-7">
-      <div className="eyebrow mb-1"><span className="h-2 w-2 rounded-full bg-brand" /> About this agent</div>
-      <h3 className="font-display text-2xl text-white">What {name} does</h3>
+    <div className="card p-6 md:p-8">
+      <div className="eyebrow mb-3"><span className="h-2 w-2 rounded-full bg-brand" /> About this agent</div>
+      <h3 className="font-display text-3xl font-semibold tracking-tightish text-white">What {name} does</h3>
       {data.description && (
-        <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-300">{data.description}</p>
+        <p className="mt-3 whitespace-pre-wrap text-base leading-relaxed text-slate-300">{data.description}</p>
       )}
 
       {caps.length > 0 && (
-        <div className="mt-6">
+        <div className="mt-7">
           <div className="label mb-3">What it offers</div>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <Stagger className="grid gap-3 sm:grid-cols-2" gap={0.05}>
             {caps.map((c, i) => {
               const nm = typeof c === 'string' ? c : c.name
               const desc = typeof c === 'string' ? '' : c.description
               return (
-                <div key={i} className="rounded-xl border border-line bg-ink-950/50 p-3">
+                <motion.div variants={stagItem} key={i} className="rounded-2xl border border-line bg-ink-950/50 p-3.5 transition-colors hover:border-brand/30">
                   <div className="flex items-start gap-2">
                     <CheckIcon className="mt-0.5 h-4 w-4 flex-none text-safe" />
                     <div>
@@ -123,10 +140,10 @@ function AboutAgent({ data, name }) {
                       {desc && <div className="mt-0.5 text-xs text-slate-400">{desc}</div>}
                     </div>
                   </div>
-                </div>
+                </motion.div>
               )
             })}
-          </div>
+          </Stagger>
         </div>
       )}
 
@@ -197,7 +214,7 @@ function recordedPerTest(runs) {
 
 function Metric({ label, value, sub, className = '' }) {
   return (
-    <div className={className}>
+    <div className={`rounded-2xl border border-line/70 bg-ink-950/40 px-4 py-3 ${className}`}>
       <div className="stat-num text-2xl">{value}</div>
       <div className="text-xs text-slate-500">{sub}</div>
       <div className="label mt-0.5">{label}</div>
@@ -229,13 +246,13 @@ function RedTeam({ id, name }) {
       <div className="relative">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="eyebrow mb-1 !text-bad/90"><span className="h-2 w-2 rounded-full bg-bad" /> Adversarial red-team · AI vs AI</div>
-            <h3 className="font-display text-xl text-white">Invent a brand-new attack</h3>
-            <p className="mt-1 max-w-md text-sm text-slate-400">An attacker model writes a novel scam that isn’t in the 20 tests. {name} faces it live. A judge model rules.</p>
+            <div className="eyebrow mb-2 !text-bad/90"><span className="h-2 w-2 rounded-full bg-bad" /> Adversarial red-team · AI vs AI</div>
+            <h3 className="font-display text-2xl font-semibold tracking-tightish text-white">Invent a brand-new attack</h3>
+            <p className="mt-1.5 max-w-md text-sm leading-relaxed text-slate-400">An attacker model writes a novel scam that isn’t in the 20 tests. {name} faces it live. A judge model rules.</p>
           </div>
-          <button onClick={go} disabled={busy} className="btn-ghost whitespace-nowrap border-bad/30 hover:border-bad/60">
+          <Tactile onClick={go} disabled={busy} className="btn-ghost whitespace-nowrap border-bad/30 hover:border-bad/60">
             {busy ? 'Generating & testing…' : 'Generate attack & test'}
-          </button>
+          </Tactile>
         </div>
 
         {busy && (
@@ -279,9 +296,9 @@ function RedTeam({ id, name }) {
 function ReplayGrid({ perTest, live }) {
   const ids = Object.keys(TEST_TITLES)
   return (
-    <div className="card p-6">
+    <div className="card p-6 md:p-7">
       <div className="mb-1 flex items-center justify-between">
-        <h3 className="font-display text-xl text-white">The 20 crash tests</h3>
+        <h3 className="font-display text-2xl font-semibold tracking-tightish text-white">The 20 crash tests</h3>
         <div className="flex items-center gap-3 text-xs text-slate-500">
           <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-safe" /> passed</span>
           <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-bad" /> failed</span>
@@ -320,7 +337,8 @@ function Subscores({ subscores }) {
   if (!subscores?.length) return null
   return (
     <div className="card p-6">
-      <h3 className="mb-4 font-display text-xl text-white">By category</h3>
+      <div className="eyebrow mb-2"><span className="h-2 w-2 rounded-full bg-brand" /> Subscores</div>
+      <h3 className="mb-4 font-display text-2xl font-semibold tracking-tightish text-white">By category</h3>
       <div className="space-y-3.5">
         {subscores.map((s) => {
           const ratio = s.total ? s.passed / s.total : 0
@@ -334,7 +352,13 @@ function Subscores({ subscores }) {
                 </span>
               </div>
               <div className="h-2 overflow-hidden rounded-full bg-ink-700">
-                <div className={`h-full rounded-full ${full ? 'bg-safe' : 'bg-warn'}`} style={{ width: `${ratio * 100}%` }} />
+                <motion.div
+                  className={`h-full rounded-full ${full ? 'bg-safe' : 'bg-warn'}`}
+                  initial={{ width: 0 }}
+                  whileInView={{ width: `${ratio * 100}%` }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+                />
               </div>
             </div>
           )
@@ -347,11 +371,14 @@ function Subscores({ subscores }) {
 function PolicyCard({ name, q, declined, book }) {
   return (
     <div className="card overflow-hidden">
-      <div className="border-b border-line bg-ink-900/60 px-6 py-4">
-        <div className="label">Policy card</div>
-        <div className="mt-1 flex items-baseline justify-between">
-          <span className="font-display text-xl text-white">{declined ? 'Declined' : 'Master policy'}</span>
-          {!declined && <span className="font-display text-2xl text-safe">{cents(q.gross_premium_usd)}<span className="text-sm text-slate-500">/payment</span></span>}
+      <div className="relative overflow-hidden border-b border-line bg-ink-900/60 px-6 py-5">
+        <div className="mesh" style={{ top: '-60%', right: '-10%', height: 160, width: 200, background: 'rgba(196,85,45,0.14)' }} />
+        <div className="relative">
+          <div className="eyebrow"><span className="h-2 w-2 rounded-full bg-brand" /> Policy card</div>
+          <div className="mt-2 flex items-baseline justify-between">
+            <span className="font-display text-2xl font-semibold tracking-tightish text-white">{declined ? 'Declined' : 'Master policy'}</span>
+            {!declined && <span className="font-display text-3xl font-semibold text-safe">{cents(q.gross_premium_usd)}<span className="text-sm font-normal text-slate-500">/payment</span></span>}
+          </div>
         </div>
       </div>
       <div className="space-y-3 px-6 py-5 text-sm">
@@ -377,9 +404,9 @@ function PolicyCard({ name, q, declined, book }) {
             One mistake in 200 payments — a dollar a payment. We don’t sell cover we’d lose money on. <b>Not listed.</b>
           </div>
         ) : (
-          <Link to="/app" className="btn-primary w-full">
+          <Tactile as={Link} to="/app" className="btn-primary w-full">
             Add {name} & connect my bank <ArrowIcon className="h-4 w-4" />
-          </Link>
+          </Tactile>
         )}
       </div>
     </div>
@@ -398,7 +425,8 @@ function Row({ k, v, strong }) {
 function Coverage() {
   return (
     <div className="card p-6 text-sm">
-      <h3 className="mb-3 font-display text-xl text-white">What’s covered</h3>
+      <div className="eyebrow mb-2"><span className="h-2 w-2 rounded-full bg-safe" /> Coverage</div>
+      <h3 className="mb-3 font-display text-2xl font-semibold tracking-tightish text-white">What’s covered</h3>
       <ul className="space-y-2">
         {[
           ['Duplicate bills inside the mandate', true],

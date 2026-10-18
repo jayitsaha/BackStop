@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
+import { motion } from 'framer-motion'
 import api from '../api'
 import { TEST_TITLES, usd } from '../lib/format'
 import { CheckIcon, XIcon, ArrowIcon } from './marks'
+import { Stagger, stagItem, Tactile } from './ui/motion.jsx'
 
 // A short, demo-friendly menu of tests with the attack in one line.
 const MENU = [
@@ -90,14 +92,15 @@ export default function CrashTestLab({ agentId, name, isLive, perTest, live, onL
   return (
     <div className="space-y-6">
     <div className="card overflow-hidden">
-      <div className="flex flex-col gap-3 border-b border-line bg-ink-900/60 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="label flex items-center gap-2">
+      <div className="relative flex flex-col gap-3 overflow-hidden border-b border-line bg-ink-900/60 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mesh" style={{ top: '-80%', left: '2%', height: 170, width: 230, background: 'rgba(196,85,45,0.12)' }} />
+        <div className="relative">
+          <div className="eyebrow">
             <span className="h-2 w-2 animate-pulse rounded-full bg-brand" /> Live crash-test rig
           </div>
-          <h3 className="mt-1 font-display text-xl text-white">Run an attack against {name}</h3>
+          <h3 className="mt-1.5 font-display text-2xl font-semibold tracking-tightish text-white">Run an attack against {name}</h3>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="relative flex items-center gap-2">
           <select
             value={testId}
             onChange={(e) => {
@@ -105,7 +108,7 @@ export default function CrashTestLab({ agentId, name, isLive, perTest, live, onL
               setPhase('idle')
               setRun(null)
             }}
-            className="max-w-[16rem] rounded-xl border border-line bg-ink-800 px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-brand"
+            className="max-w-[16rem] rounded-xl border border-line bg-ink-800 px-3 py-2.5 text-sm text-slate-200 outline-none transition focus:border-brand"
           >
             {MENU.map(([id, label]) => (
               <option key={id} value={id}>
@@ -113,9 +116,9 @@ export default function CrashTestLab({ agentId, name, isLive, perTest, live, onL
               </option>
             ))}
           </select>
-          <button onClick={go} disabled={phase === 'building' || phase === 'running'} className="btn-primary whitespace-nowrap">
+          <Tactile onClick={go} disabled={phase === 'building' || phase === 'running'} className="btn-primary whitespace-nowrap">
             {phase === 'building' || phase === 'running' ? 'Running…' : 'Run crash test'}
-          </button>
+          </Tactile>
         </div>
       </div>
 
@@ -128,7 +131,7 @@ export default function CrashTestLab({ agentId, name, isLive, perTest, live, onL
           )}
           {phase === 'building' && <BuildingState live={isLive} />}
           {attack && (
-            <div className="animate-fade-up rounded-xl border border-line bg-ink-950/60 p-4">
+            <div className="animate-fade-up rounded-2xl border border-line bg-ink-950/60 p-4">
               <div className="flex items-center gap-2 text-xs text-slate-500">
                 <span className="rounded bg-ink-700 px-1.5 py-0.5 font-mono uppercase">{attack.channel}</span>
                 <span className="truncate">{attack.sender}</span>
@@ -220,18 +223,19 @@ function GenerateTailored({ agentId, name }) {
   const running = phase === 'working'
 
   return (
-    <div className="card relative overflow-hidden p-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="card relative overflow-hidden p-6 md:p-7">
+      <div className="mesh" style={{ top: '-70px', right: '4%', height: 180, width: 220, background: 'rgba(196,85,45,0.10)' }} />
+      <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="eyebrow mb-1"><span className="h-2 w-2 rounded-full bg-brand" /> Live · tailored to this agent</div>
-          <h3 className="font-display text-xl text-white">Generate tailored attacks</h3>
-          <p className="mt-1 max-w-md text-sm text-slate-400">
+          <div className="eyebrow mb-2"><span className="h-2 w-2 rounded-full bg-brand" /> Live · tailored to this agent</div>
+          <h3 className="font-display text-2xl font-semibold tracking-tightish text-white">Generate tailored attacks</h3>
+          <p className="mt-1.5 max-w-md text-sm leading-relaxed text-slate-400">
             The 20 crash tests are bill-pay fraud. This generates fresh attacks aimed at {name}’s own use case, runs it live against each, and scores every one.
           </p>
         </div>
-        <button onClick={go} disabled={running} className="btn-primary whitespace-nowrap">
+        <Tactile onClick={go} disabled={running} className="btn-primary whitespace-nowrap">
           {running ? 'Generating & testing…' : 'Generate tailored attacks'}
-        </button>
+        </Tactile>
       </div>
 
       {(running || (job && phase !== 'done')) && !err && (
@@ -255,7 +259,13 @@ function GenerateTailored({ agentId, name }) {
               </div>
             </div>
           )}
-          {tests.map((t) => <TailoredCard key={t.id} t={t} name={name} />)}
+          <Stagger className="space-y-3" gap={0.05}>
+            {tests.map((t) => (
+              <motion.div variants={stagItem} key={t.id}>
+                <TailoredCard t={t} name={name} />
+              </motion.div>
+            ))}
+          </Stagger>
         </div>
       )}
     </div>
@@ -333,10 +343,12 @@ function CustomComposer({ agentId, name }) {
 
   const passed = res?.passed
   return (
-    <div className="card relative overflow-hidden p-6">
-      <div className="eyebrow mb-1"><span className="h-2 w-2 rounded-full bg-brand" /> Author your own</div>
-      <h3 className="font-display text-xl text-white">Custom crash test</h3>
-      <p className="mt-1 max-w-lg text-sm text-slate-400">
+    <div className="card relative overflow-hidden p-6 md:p-7">
+      <div className="mesh" style={{ bottom: '-60px', left: '8%', height: 160, width: 220, background: 'rgba(196,85,45,0.08)' }} />
+      <div className="relative">
+      <div className="eyebrow mb-2"><span className="h-2 w-2 rounded-full bg-brand" /> Author your own</div>
+      <h3 className="font-display text-2xl font-semibold tracking-tightish text-white">Custom crash test</h3>
+      <p className="mt-1.5 max-w-lg text-sm leading-relaxed text-slate-400">
         Write any adversarial message or request, say what a safe agent should do, and watch {name} face it live. A judge rules pass or fail.
       </p>
 
@@ -356,9 +368,9 @@ function CustomComposer({ agentId, name }) {
           <input className="inp" value={safe} onChange={(e) => setSafe(e.target.value)}
                  placeholder="e.g. Refuse, do not pay an unverified account, and alert the customer." />
         </div>
-        <button onClick={go} disabled={busy || !attack.trim()} className="btn-primary">
+        <Tactile onClick={go} disabled={busy || !attack.trim()} className="btn-primary">
           {busy ? 'Running live…' : 'Run custom crash test'}
-        </button>
+        </Tactile>
       </div>
 
       {busy && (
@@ -371,8 +383,8 @@ function CustomComposer({ agentId, name }) {
 
       {res && (
         <div className="mt-5 animate-fade-up">
-          <div className={`rounded-xl border p-4 ${passed ? 'border-safe/40 bg-safe/10' : 'border-bad/40 bg-bad/10'}`}>
-            <div className={`flex items-center gap-2 font-display text-lg ${passed ? 'text-safe' : 'text-bad'}`}>
+          <div className={`rounded-2xl border p-4 ${passed ? 'border-safe/40 bg-safe/10 shadow-glow-safe' : 'border-bad/40 bg-bad/10'}`}>
+            <div className={`flex items-center gap-2 font-display text-xl font-semibold tracking-tightish ${passed ? 'text-safe' : 'text-bad'}`}>
               {passed ? <CheckIcon className="h-5 w-5" /> : <XIcon className="h-5 w-5" />}
               {passed ? `${name} passed your crash test` : `${name} failed your crash test`}
             </div>
@@ -391,6 +403,7 @@ function CustomComposer({ agentId, name }) {
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }
@@ -436,8 +449,8 @@ function Step({ s }) {
 
 function Verdict({ passed, name, failedChecks }) {
   return (
-    <div className={`mt-5 animate-pop rounded-xl border p-4 ${passed ? 'border-safe/40 bg-safe/10' : 'border-bad/40 bg-bad/10'}`}>
-      <div className={`flex items-center gap-2 font-display text-lg ${passed ? 'text-safe' : 'text-bad'}`}>
+    <div className={`mt-5 animate-pop rounded-2xl border p-4 ${passed ? 'border-safe/40 bg-safe/10 shadow-glow-safe' : 'border-bad/40 bg-bad/10'}`}>
+      <div className={`flex items-center gap-2 font-display text-xl font-semibold tracking-tightish ${passed ? 'text-safe' : 'text-bad'}`}>
         {passed ? <CheckIcon className="h-5 w-5" /> : <XIcon className="h-5 w-5" />}
         {passed ? `${name} passed this crash test` : `${name} failed this crash test`}
       </div>

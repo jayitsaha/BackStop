@@ -30,13 +30,25 @@
  * ========================================================================== */
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import api from '../../api'
 import { usd, cents } from '../../lib/format'
 import { accent, RunTimeline } from '../widgets/shared.jsx'
 import { GmailConnect } from '../widgets/guards.jsx'
 import { GradePill, VerifiedMark, ShieldIcon, LockIcon, CheckIcon, XIcon, ArrowIcon } from '../marks'
+import { Reveal, Stagger, stagItem, Tactile } from '../ui/motion.jsx'
+import DotField from '../ui/DotField.jsx'
+import { GlowBackdrop, GoldRule } from '../ui/Backdrop.jsx'
+import AgentGlobe from '../ui/AgentGlobe.jsx'
 
 /* ------------------------------------------------------------------ helpers */
+// espresso → mocha → cream dot-matrix ramp used for premium trip "covers" (original art)
+const COVER_PALETTE = ['#140d0a', '#3a1c11', '#6e3017', '#a8471f', '#c4552d', '#e07a46', '#ffb98c', '#ffded2']
+// a soft edge mask so the globe dissolves into the hero rather than sitting in a box
+const GLOBE_MASK = {
+  maskImage: 'radial-gradient(60% 60% at 50% 46%, #000 0%, transparent 80%)',
+  WebkitMaskImage: 'radial-gradient(60% 60% at 50% 46%, #000 0%, transparent 80%)',
+}
 const RISK = {
   none: { label: 'Verified', chip: 'border-safe/30 bg-safe/10 text-safe', dot: 'bg-safe' },
   low: { label: 'Check it', chip: 'border-warn/30 bg-warn/10 text-warn', dot: 'bg-warn' },
@@ -57,33 +69,35 @@ const VIBES = [
   { label: 'Surprise me', vibe: 'surprise me — somewhere I probably would not think of myself', budget: 0 },
 ]
 
-function Panel({ eyebrow, title, subtitle, acc = 'safe', right, children, live }) {
+function Panel({ eyebrow, title, subtitle, acc = 'safe', right, children, live, id }) {
   const t = accent(acc)
   return (
-    <div className="card relative overflow-hidden p-6">
-      <div className="mesh" style={{ top: '-80px', right: '4%', height: 180, width: 220, background: t.fill }} />
+    <Reveal id={id} className="card relative overflow-hidden p-6 md:p-7">
+      <div className="mesh" style={{ top: '-90px', right: '3%', height: 200, width: 240, background: t.fill }} />
       <div className="relative">
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
+        <div className="mb-5 flex items-start justify-between gap-3">
+          <div className="min-w-0">
             {eyebrow && (
-              <div className={`eyebrow mb-1 ${t.text}`}>
-                {live && (
+              <div className={`eyebrow mb-2 ${t.text}`}>
+                {live ? (
                   <span className="relative flex h-2 w-2">
                     <span className={`absolute inline-flex h-full w-full animate-ping rounded-full ${t.dot} opacity-60`} />
                     <span className={`relative inline-flex h-2 w-2 rounded-full ${t.dot}`} />
                   </span>
+                ) : (
+                  <span className={`inline-block h-3 w-px ${t.dot}`} />
                 )}
                 {eyebrow}
               </div>
             )}
-            {title && <h3 className="font-display text-xl tracking-tightish text-white">{title}</h3>}
-            {subtitle && <p className="mt-1 text-sm text-slate-400">{subtitle}</p>}
+            {title && <h3 className="font-display text-2xl font-semibold leading-tight tracking-tighter2 text-white">{title}</h3>}
+            {subtitle && <p className="mt-1.5 max-w-xl text-sm leading-relaxed text-slate-400">{subtitle}</p>}
           </div>
           {right}
         </div>
         {children}
       </div>
-    </div>
+    </Reveal>
   )
 }
 
@@ -325,81 +339,110 @@ export default function WanderPage({ agentId, agent, customer, agentName }) {
 
   return (
     <div className="space-y-6">
-      {/* ============================ TRUST / IDENTITY STRIP ============================ */}
-      <div className="card relative overflow-hidden p-6">
-        <div className="mesh" style={{ top: '-120px', right: '-40px', height: 280, width: 360, background: t.fill }} />
-        <div className="relative flex flex-wrap items-start justify-between gap-5">
+      {/* ============================ CINEMATIC HERO ============================ */}
+      <Reveal as="section" className="card-raised relative overflow-hidden p-7 md:p-10">
+        <GlowBackdrop />
+
+        <div className="relative grid items-center gap-8 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="min-w-0">
-            <div className={`eyebrow mb-2 ${t.text}`}>
-              <span className="text-lg leading-none">✈️</span> Travel concierge desk
+            <div className="flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.26em] text-brand-soft">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand opacity-60" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand" />
+              </span>
+              Travel{grade.grade ? ` · Grade ${grade.grade}` : ''} · Scam-checked concierge
             </div>
-            <h1 className="font-display text-4xl font-semibold tracking-tightish text-white">{name}</h1>
-            <p className="mt-2 max-w-xl text-slate-400">{agent?.tagline || 'Book safe, smart travel — no scams, no surprises.'}</p>
-            <div className="mt-4 flex flex-wrap items-center gap-2">
+
+            <h1 className="mt-5 font-display text-7xl font-semibold leading-[0.88] tracking-tighter3 text-white md:text-8xl">
+              {name}<span className="text-brand">.</span>
+            </h1>
+            <p className="mt-5 max-w-xl text-lg leading-relaxed text-slate-400">
+              {agent?.tagline || 'Book safe, smart travel — no scams, no surprises. I scout the trip, verify every provider, and book it end to end.'}
+            </p>
+
+            <div className="mt-6 flex flex-wrap items-center gap-2">
               <VerifiedMark />
               <GradePill grade={grade.grade} score={grade.score} />
               <span className="chip border-safe/30 bg-safe/10 text-safe">
                 <LockIcon className="h-3.5 w-3.5" /> Insured mistakes
               </span>
             </div>
+
+            <div className="mt-7 max-w-md">
+              <GoldRule />
+              <div className="mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-card border border-line bg-line/60">
+                <div className="bg-ink-900/70 px-4 py-4">
+                  <div className={`stat-num text-2xl md:text-3xl ${t.text}`}>{cents(quote.gross_premium_usd)}</div>
+                  <div className="label mt-1 !tracking-[0.14em]">Premium / booking</div>
+                </div>
+                <div className="bg-ink-900/70 px-4 py-4">
+                  <div className="stat-num text-2xl text-white md:text-3xl">{usd(quote.per_incident_limit_usd, 0)}</div>
+                  <div className="label mt-1 !tracking-[0.14em]">Covered / incident</div>
+                </div>
+              </div>
+            </div>
+
+            <span className="handwriting mt-5 block text-base text-brand-soft/80">no scams, no surprises.</span>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-xl border border-line bg-ink-900/50 px-4 py-3">
-              <div className={`stat-num text-2xl ${t.text}`}>{cents(quote.gross_premium_usd)}</div>
-              <div className="label mt-1">Premium / booking</div>
-            </div>
-            <div className="rounded-xl border border-line bg-ink-900/50 px-4 py-3">
-              <div className="stat-num text-2xl text-white">{usd(quote.per_incident_limit_usd, 0)}</div>
-              <div className="label mt-1">Covered per incident</div>
-            </div>
+
+          {/* the agent-network globe — a destinations / routes motif beside the headline */}
+          <div className="relative hidden aspect-square w-full self-center lg:block" style={GLOBE_MASK} aria-hidden>
+            <AgentGlobe className="h-full w-full" speed={0.9} />
+            <span className="absolute bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap font-mono text-[9px] uppercase tracking-[0.3em] text-brand-soft/70">
+              routes · scouted live
+            </span>
           </div>
         </div>
-      </div>
+      </Reveal>
 
       {/* ============================ ⚡ AUTO-PILOT ============================ */}
-      <div className="card relative overflow-hidden border-brand/30 p-5">
-        <div className="mesh" style={{ top: '-80px', right: '2%', height: 200, width: 280, background: accent('brand').fill }} />
-        <div className="relative flex flex-wrap items-center justify-between gap-4">
+      <Reveal className="card relative overflow-hidden border-brand/40 p-6 shadow-glow">
+        <div className="pointer-events-none absolute inset-0 opacity-[0.35]" style={{ maskImage: 'radial-gradient(70% 90% at 90% 0%, #000, transparent 72%)', WebkitMaskImage: 'radial-gradient(70% 90% at 90% 0%, #000, transparent 72%)' }} aria-hidden>
+          <DotField cell={7} speed={0.05} opacity={0.6} palette={COVER_PALETTE} />
+        </div>
+        <div className="mesh animate-drift" style={{ top: '-80px', right: '2%', height: 220, width: 300, background: accent('brand').fill }} />
+        <div className="relative flex flex-wrap items-center justify-between gap-5">
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="text-xl leading-none">⚡</span>
-              <h3 className="font-display text-xl tracking-tightish text-white">Auto-pilot</h3>
+            <div className="eyebrow mb-2">
+              <span className="text-base leading-none">⚡</span> Hands-free
             </div>
-            <p className="mt-1 text-sm text-slate-400">
+            <h3 className="font-display text-2xl font-semibold tracking-tighter2 text-white">Auto-pilot the whole trip</h3>
+            <p className="mt-1.5 max-w-lg text-sm leading-relaxed text-slate-400">
               {autopilot
                 ? <span className="inline-flex items-center gap-2 text-brand-soft"><Spinner /> {autoStep || 'Working…'}</span>
-                : 'Hand me the wheel — I plan, pick the best trip within your budget, and book it end to end.'}
+                : 'Hand me the wheel — I plan, pick the best trip within your budget, verify every provider, and book it end to end.'}
             </p>
             {autoErr && <p className="mt-2 text-sm text-bad">{autoErr}</p>}
           </div>
-          <button onClick={runAutopilot} disabled={autopilot || booking} className="btn-primary bg-brand whitespace-nowrap">
+          <Tactile onClick={runAutopilot} disabled={autopilot || booking} className="btn-primary whitespace-nowrap px-5 py-3 text-[15px]">
             {autopilot ? (autoStep || 'Running…') : <>⚡ Run auto-pilot</>}
-          </button>
+          </Tactile>
         </div>
-      </div>
+      </Reveal>
 
       {/* ============================ HERO: WANDER PROPOSES ============================ */}
       <Panel eyebrow="Wander is on it" title="Trips I scouted for you" acc={acc} live={proposing}
         subtitle={proposals?.intro || "I look for safe, well-priced trips so you don't have to start from a blank page."}
         right={
           !proposing && (
-            <button onClick={() => runPropose({ label: null })} className="btn-ghost !py-2 text-sm whitespace-nowrap">
+            <Tactile onClick={() => runPropose({ label: null })} className="btn-ghost !py-2 text-sm whitespace-nowrap">
               Scout again
-            </button>
+            </Tactile>
           )
         }
       >
         {/* vibe chips the agent suggests */}
+        <div className="mb-3 label !tracking-[0.2em]">Try a vibe</div>
         <div className="mb-5 flex flex-wrap gap-2">
           {VIBES.map((v) => (
-            <button
+            <Tactile
               key={v.label}
               onClick={() => runPropose({ budget: v.budget || defaultBudget, vibe: v.vibe, label: v.label })}
               disabled={proposing}
-              className={`chip transition ${activeVibe === v.label ? `${t.bg} ${t.text} border-safe/40` : 'hover:border-brand/40 hover:text-white'}`}
+              className={`chip transition-colors ${activeVibe === v.label ? `${t.bg} ${t.text} ${t.border} ring-1 ${t.ring}` : 'hover:border-brand/40 hover:text-white'}`}
             >
               {v.label}
-            </button>
+            </Tactile>
           ))}
         </div>
 
@@ -412,32 +455,43 @@ export default function WanderPage({ agentId, agent, customer, agentName }) {
               value={dream}
               onChange={(e) => setDream(e.target.value)}
             />
-            <button type="submit" disabled={searching || !dream.trim()} className="btn-primary bg-safe whitespace-nowrap">
+            <Tactile type="submit" disabled={searching || !dream.trim()} className="btn-primary whitespace-nowrap">
               {searching ? 'Thinking…' : <>Ask Wander <ArrowIcon className="h-4 w-4" /></>}
-            </button>
+            </Tactile>
           </div>
-          <button type="button" onClick={() => setShowRefine((s) => !s)} className="mt-2 text-xs text-slate-500 hover:text-slate-300">
+          <button type="button" onClick={() => setShowRefine((s) => !s)} className="mt-2 font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500 transition-colors hover:text-slate-300">
             {showRefine ? '− hide exact fields' : '+ refine with exact dates & budget'}
           </button>
         </form>
 
         {/* secondary, collapsed refine form */}
-        {showRefine && (
-          <form onSubmit={runRefine} className="mb-5 animate-fade-up space-y-3 rounded-xl border border-line bg-ink-900/40 p-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="From"><input className="inp text-sm" placeholder="Atlanta (ATL)" value={form.origin} onChange={set('origin')} /></Field>
-              <Field label="To"><input className="inp text-sm" placeholder="Lisbon (LIS)" value={form.destination} onChange={set('destination')} /></Field>
-              <Field label="Depart"><input className="inp text-sm" type="date" value={form.depart} onChange={set('depart')} /></Field>
-              <Field label="Return"><input className="inp text-sm" type="date" value={form.return} onChange={set('return')} /></Field>
-              <Field label="Travelers"><input className="inp text-sm" type="number" min="1" value={form.travelers} onChange={set('travelers')} /></Field>
-              <Field label="Budget / person (USD)"><input className="inp text-sm" type="number" min="0" value={form.budget_per_person} onChange={set('budget_per_person')} /></Field>
-            </div>
-            <Field label="Preferences">
-              <input className="inp text-sm" placeholder="nonstop if possible, near old town, breakfast included…" value={form.prefs} onChange={set('prefs')} />
-            </Field>
-            <button type="submit" disabled={searching} className="btn-ghost !py-2 text-sm">{searching ? 'Searching…' : 'Search these exactly'}</button>
-          </form>
-        )}
+        <AnimatePresence initial={false}>
+          {showRefine && (
+            <motion.form
+              onSubmit={runRefine}
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+              className="mb-5 overflow-hidden"
+            >
+              <div className="space-y-3 rounded-card border border-line bg-ink-900/50 p-4">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="From"><input className="inp text-sm" placeholder="Atlanta (ATL)" value={form.origin} onChange={set('origin')} /></Field>
+                  <Field label="To"><input className="inp text-sm" placeholder="Lisbon (LIS)" value={form.destination} onChange={set('destination')} /></Field>
+                  <Field label="Depart"><input className="inp text-sm" type="date" value={form.depart} onChange={set('depart')} /></Field>
+                  <Field label="Return"><input className="inp text-sm" type="date" value={form.return} onChange={set('return')} /></Field>
+                  <Field label="Travelers"><input className="inp text-sm" type="number" min="1" value={form.travelers} onChange={set('travelers')} /></Field>
+                  <Field label="Budget / person (USD)"><input className="inp text-sm" type="number" min="0" value={form.budget_per_person} onChange={set('budget_per_person')} /></Field>
+                </div>
+                <Field label="Preferences">
+                  <input className="inp text-sm" placeholder="nonstop if possible, near old town, breakfast included…" value={form.prefs} onChange={set('prefs')} />
+                </Field>
+                <Tactile type="submit" disabled={searching} className="btn-ghost !py-2 text-sm">{searching ? 'Searching…' : 'Search these exactly'}</Tactile>
+              </div>
+            </motion.form>
+          )}
+        </AnimatePresence>
 
         {/* proposals / skeleton / error */}
         {proposing ? (
@@ -445,19 +499,21 @@ export default function WanderPage({ agentId, agent, customer, agentName }) {
             {[0, 1, 2].map((i) => <TripSkeleton key={i} />)}
           </div>
         ) : proposeErr ? (
-          <div className="rounded-xl border border-bad/30 bg-bad/10 p-4 text-sm text-bad">
+          <div className="rounded-card border border-bad/30 bg-bad/10 p-4 text-sm text-bad">
             {proposeErr}
             <button onClick={() => runPropose({ label: activeVibe })} className="ml-3 underline hover:text-white">Retry</button>
           </div>
         ) : (
-          <div className="grid gap-4 md:grid-cols-3">
+          <Stagger key={activeVibe || 'default'} className="grid gap-4 md:grid-cols-3" gap={0.08}>
             {(proposals?.trips || []).map((tr, i) => (
-              <TripCard key={i} tr={tr} onPick={() => pickTrip(tr)} />
+              <motion.div key={i} variants={stagItem}>
+                <TripCard tr={tr} index={i} onPick={() => pickTrip(tr)} />
+              </motion.div>
             ))}
             {(proposals?.trips || []).length === 0 && (
               <p className="text-sm text-slate-500">No ideas came back — tap a vibe above or ask me in your own words.</p>
             )}
-          </div>
+          </Stagger>
         )}
       </Panel>
 
@@ -537,9 +593,9 @@ export default function WanderPage({ agentId, agent, customer, agentName }) {
                     <ShieldIcon className="h-3.5 w-3.5 shrink-0" />
                     I verify every provider before I book — and every booking is insured.
                   </div>
-                  <button onClick={bookItinerary} disabled={booking} className="btn-primary w-full bg-brand">
+                  <Tactile onClick={bookItinerary} disabled={booking} className="btn-primary w-full">
                     {booking ? 'Booking…' : `Have Wander book this · ${usd(savedTotal, 0)}`}
-                  </button>
+                  </Tactile>
                 </div>
               )}
               {bookErr && <div className="mt-3 rounded-xl border border-bad/30 bg-bad/10 px-3 py-2 text-xs text-bad">{bookErr}</div>}
@@ -561,13 +617,13 @@ export default function WanderPage({ agentId, agent, customer, agentName }) {
               {/* input methods: paste (above) · screenshot · gmail (below) */}
               <div className="flex items-center gap-2">
                 <input ref={fileRef} type="file" accept="image/*" onChange={onPickScreenshot} className="hidden" />
-                <button
+                <Tactile
                   type="button"
                   onClick={() => fileRef.current?.click()}
                   className="btn-ghost !py-2 text-sm"
                 >
                   📷 Upload screenshot
-                </button>
+                </Tactile>
                 <span className="text-xs text-slate-500">PNG/JPG of the email or booking page</span>
               </div>
 
@@ -581,9 +637,9 @@ export default function WanderPage({ agentId, agent, customer, agentName }) {
                 </div>
               )}
 
-              <button type="submit" disabled={verifying || (!verifyText.trim() && !verifyImg)} className="btn-primary w-full bg-info">
+              <Tactile type="submit" disabled={verifying || (!verifyText.trim() && !verifyImg)} className="btn-primary w-full">
                 {verifying ? 'Checking…' : verifyImg && !verifyText.trim() ? 'Read screenshot & check it' : 'Check it'}
-              </button>
+              </Tactile>
             </form>
             {verify && (() => {
               const v = VERDICT[verify.verdict] || VERDICT.caution
@@ -631,18 +687,22 @@ export default function WanderPage({ agentId, agent, customer, agentName }) {
       </Panel>
 
       {/* ============================ INSURANCE STRIP ============================ */}
-      <div className="card flex flex-wrap items-center justify-between gap-4 p-5">
-        <div className="flex items-center gap-3">
-          <span className={`grid h-10 w-10 place-items-center rounded-xl ${t.bg} ${t.text}`}><ShieldIcon className="h-5 w-5" /></span>
+      <Reveal className="card relative flex flex-wrap items-center justify-between gap-4 overflow-hidden border-brand/20 p-6">
+        <div className="pointer-events-none absolute inset-0 opacity-[0.3]" style={{ maskImage: 'radial-gradient(60% 120% at 0% 50%, #000, transparent 70%)', WebkitMaskImage: 'radial-gradient(60% 120% at 0% 50%, #000, transparent 70%)' }} aria-hidden>
+          <DotField cell={7} speed={0.04} opacity={0.55} palette={COVER_PALETTE} />
+        </div>
+        <div className="relative flex items-center gap-4">
+          <span className="grid h-11 w-11 place-items-center rounded-2xl bg-brand/10 text-brand ring-1 ring-brand/30"><ShieldIcon className="h-5 w-5" /></span>
           <div>
-            <div className="font-display text-base text-white">Every booking is insured</div>
-            <div className="text-sm text-slate-400">
-              If a covered mistake slips through, you're protected up to {usd(quote.per_incident_limit_usd, 0)} per incident. File a claim and Backstop adjudicates it.
+            <div className="eyebrow mb-1"><span className="inline-block h-3 w-px bg-brand/70" /> Backed by Backstop</div>
+            <div className="font-display text-lg font-semibold tracking-tightish text-white">Every booking is insured</div>
+            <div className="mt-0.5 max-w-xl text-sm leading-relaxed text-slate-400">
+              If a covered mistake slips through, you're protected up to <span className="font-mono text-slate-200">{usd(quote.per_incident_limit_usd, 0)}</span> per incident. File a claim and Backstop adjudicates it.
             </div>
           </div>
         </div>
-        <Link to="/claims" className="btn-ghost whitespace-nowrap">File or view a claim <ArrowIcon className="h-4 w-4" /></Link>
-      </div>
+        <Tactile as={Link} to="/claims" className="btn-ghost relative whitespace-nowrap">File or view a claim <ArrowIcon className="h-4 w-4" /></Tactile>
+      </Reveal>
     </div>
   )
 }
@@ -673,41 +733,62 @@ function BudgetBar({ label, value, max }) {
   )
 }
 
-function TripCard({ tr, onPick }) {
+function TripCard({ tr, onPick, index = 0 }) {
   const r = RISK[tr.scam_risk] || RISK.none
   return (
-    <div className="flex flex-col rounded-xl border border-line bg-ink-900/40 p-4">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="truncate font-display text-lg text-white">{tr.destination}</div>
-          {tr.headline && <div className="mt-0.5 truncate text-xs text-slate-400">{tr.headline}</div>}
+    <div className="group flex h-full flex-col overflow-hidden rounded-card border border-line bg-ink-850/70 shadow-card backdrop-blur-xl transition-all duration-500 ease-out-expo hover:-translate-y-1.5 hover:border-brand/40 hover:shadow-raised">
+      {/* ---- COVER: original dot-matrix "destination" art ---- */}
+      <div className="relative h-32 overflow-hidden border-b border-line/60 bg-ink-900">
+        <div className="absolute inset-0 transition duration-700 ease-out-expo group-hover:scale-[1.05] group-hover:brightness-[1.18]">
+          <DotField cell={6} speed={0.045} opacity={0.78} palette={COVER_PALETTE} />
         </div>
-        <span className="stat-num shrink-0 text-right text-base text-white">{usd(tr.total_estimate_usd, 0)}<div className="label !text-[9px]">/ person</div></span>
-      </div>
-      {(tr.depart || tr.origin) && (
-        <div className="mt-2 text-xs text-slate-500">
-          {tr.origin ? `${tr.origin} · ` : ''}{tr.depart}{tr.return ? ` → ${tr.return}` : ''}{tr.travelers ? ` · ${tr.travelers} traveler(s)` : ''}
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#0d0a09] via-[#0d0a09]/20 to-[#0d0a09]/60" />
+        {/* type eyebrow */}
+        <div className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-ink-950/55 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.2em] text-slate-300 backdrop-blur-sm">
+          <span className="text-slate-500">№ {String(index + 1).padStart(2, '0')}</span>
+          {tr.origin ? `${tr.origin} →` : 'Trip'}
         </div>
-      )}
-      {tr.why && <p className="mt-2 text-sm text-slate-300">{tr.why}</p>}
-
-      <div className="mt-3 space-y-1">
-        {(tr.options || []).map((o, i) => (
-          <div key={i} className="flex items-center justify-between gap-2 text-xs text-slate-400">
-            <span className="min-w-0 truncate">{TYPE_ICON[o.type] || '🧳'} {o.title} <span className="text-slate-600">· {o.provider}</span></span>
-            <span className="shrink-0 text-slate-300">{usd(o.price_usd, 0)}</span>
+        {/* price in mono */}
+        <div className="absolute right-3 top-3 rounded-full bg-ink-950/55 px-2.5 py-1 text-right backdrop-blur-sm">
+          <div className="font-mono text-sm font-semibold text-white">{usd(tr.total_estimate_usd, 0)}</div>
+          <div className="label !text-[8px] !tracking-[0.14em]">/ person</div>
+        </div>
+        {/* masthead destination */}
+        <div className="absolute inset-x-4 bottom-3">
+          <div className="font-sans text-2xl font-bold leading-[0.95] tracking-tighter3 text-white transition-transform duration-500 ease-out-expo group-hover:-translate-y-0.5">
+            {tr.destination}
           </div>
-        ))}
+          {tr.headline && <div className="mt-0.5 truncate text-[11px] text-slate-300">{tr.headline}</div>}
+        </div>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <span className={`chip !px-2 !py-0.5 text-[10px] ${r.chip}`}><span className={`h-1.5 w-1.5 rounded-full ${r.dot}`} />{r.label}</span>
-        <span className={`chip !px-2 !py-0.5 text-[10px] ${tr.within_budget ? 'border-safe/30 bg-safe/10 text-safe' : 'border-warn/30 bg-warn/10 text-warn'}`}>
-          {tr.within_budget ? 'Within budget' : 'Over budget'}
-        </span>
-      </div>
+      {/* ---- body ---- */}
+      <div className="flex flex-1 flex-col p-4">
+        {(tr.depart || tr.origin) && (
+          <div className="font-mono text-[11px] text-slate-500">
+            {tr.depart}{tr.return ? ` → ${tr.return}` : ''}{tr.travelers ? ` · ${tr.travelers} traveler(s)` : ''}
+          </div>
+        )}
+        {tr.why && <p className="mt-2 text-sm leading-relaxed text-slate-300">{tr.why}</p>}
 
-      <button onClick={onPick} className="btn-primary mt-4 w-full bg-safe !py-2 text-sm">I'd book this →</button>
+        <div className="mt-3 space-y-1.5 border-t border-line/60 pt-3">
+          {(tr.options || []).map((o, i) => (
+            <div key={i} className="flex items-center justify-between gap-2 text-xs text-slate-400">
+              <span className="min-w-0 truncate">{TYPE_ICON[o.type] || '🧳'} {o.title} <span className="text-slate-600">· {o.provider}</span></span>
+              <span className="shrink-0 font-mono text-slate-300">{usd(o.price_usd, 0)}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className={`chip !px-2 !py-0.5 text-[10px] ${r.chip}`}><span className={`h-1.5 w-1.5 rounded-full ${r.dot}`} />{r.label}</span>
+          <span className={`chip !px-2 !py-0.5 text-[10px] ${tr.within_budget ? 'border-safe/30 bg-safe/10 text-safe' : 'border-warn/30 bg-warn/10 text-warn'}`}>
+            {tr.within_budget ? 'Within budget' : 'Over budget'}
+          </span>
+        </div>
+
+        <Tactile onClick={onPick} className="btn-primary mt-4 w-full !py-2 text-sm">I'd book this <ArrowIcon className="h-4 w-4" /></Tactile>
+      </div>
     </div>
   )
 }
@@ -715,7 +796,7 @@ function TripCard({ tr, onPick }) {
 function OptionRow({ o, saved, onSave }) {
   const r = RISK[o.scam_risk] || RISK.none
   return (
-    <div className={`rounded-xl border p-3.5 ${o.scam_risk === 'high' ? 'border-bad/40 bg-bad/5' : 'border-line bg-ink-900/40'}`}>
+    <div className={`rounded-card border p-3.5 transition-colors ${o.scam_risk === 'high' ? 'border-bad/40 bg-bad/5' : 'border-line bg-ink-900/40 hover:border-brand/30'}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-semibold text-white">
@@ -725,7 +806,7 @@ function OptionRow({ o, saved, onSave }) {
           {o.notes && <div className="mt-1 text-xs text-slate-400">{o.notes}</div>}
         </div>
         <div className="shrink-0 text-right">
-          <div className="stat-num text-lg text-white">{usd(o.price_usd, 0)}</div>
+          <div className="stat-num font-mono text-lg text-white">{usd(o.price_usd, 0)}</div>
           <div className="label !text-[9px] mt-0.5">{o.type === 'flight' ? 'per person' : 'total'}</div>
         </div>
       </div>
@@ -737,7 +818,7 @@ function OptionRow({ o, saved, onSave }) {
         <button
           onClick={onSave}
           disabled={saved || o.scam_risk === 'high'}
-          className="ml-auto text-xs font-semibold text-safe hover:text-white disabled:text-slate-600"
+          className="ml-auto text-xs font-semibold text-brand-soft transition-colors hover:text-white disabled:text-slate-600"
           title={o.scam_risk === 'high' ? 'I flagged this as a scam risk — not addable' : ''}
         >
           {saved ? '✓ In itinerary' : o.scam_risk === 'high' ? 'Blocked' : '+ Add to itinerary'}

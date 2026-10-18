@@ -1,4 +1,5 @@
 import { Component } from 'react'
+import { Reveal } from './ui/motion.jsx'
 import { WidgetUnavailable } from './widgets/shared.jsx'
 import { StatCards, ItemList, Timeline, Chart, Capabilities, Markdown, MandateEditor } from './widgets/data.jsx'
 import { AgentRunner, FormAction, ClaimsPanel } from './widgets/actions.jsx'
@@ -20,8 +21,8 @@ class SectionBoundary extends Component {
   render() {
     if (this.state.error) {
       return (
-        <div className="card p-5">
-          <div className="label mb-1 text-slate-500">{this.props.title || this.props.type}</div>
+        <div className="card relative overflow-hidden p-5">
+          <div className="eyebrow mb-1 text-slate-500">{this.props.title || this.props.type}</div>
           <p className="text-sm text-slate-500">This widget hit an error and was skipped — the rest of your dashboard is fine.</p>
         </div>
       )
@@ -68,11 +69,11 @@ export default function DynamicDashboard({ schema, customer, agentId, agentName,
         const span = section.span === 'half' ? 'lg:col-span-1' : 'lg:col-span-2'
         const withAccent = { ...section, accent: section.accent || schema.accent }
         return (
-          <div key={section.id || i} className={span}>
+          <Reveal key={section.id || i} className={span} y={18} delay={Math.min(i, 5) * 0.05}>
             <SectionBoundary type={section.type} title={section.title}>
               {renderSection(withAccent, shared)}
             </SectionBoundary>
-          </div>
+          </Reveal>
         )
       })}
     </div>

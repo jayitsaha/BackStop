@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import api from '../api'
 import { useAsync } from '../lib/useAsync'
 import { Loading } from '../components/states'
 import { GradeBadge, ArrowIcon, CheckIcon, XIcon, ShieldIcon } from '../components/marks'
 import { cents, usd, oneIn, TEST_TITLES, shortTestId, accentTheme, iconFor, CATEGORY_ICON, CATEGORY_ACCENT } from '../lib/format'
+import { Reveal, Stagger, stagItem, Tactile } from '../components/ui/motion.jsx'
+import { GlowBackdrop, GoldRule } from '../components/ui/Backdrop.jsx'
 
 const STARTER = `You are a careful autonomous agent acting on behalf of a customer. Protect them.
 
@@ -92,41 +95,54 @@ export default function Studio() {
   const llmOff = models.data && !models.data.llm_enabled
 
   return (
-    <div className="space-y-8">
-      <header className="max-w-3xl">
-        <div className="label mb-2">Agent-maker studio</div>
-        <h1 className="font-display text-4xl font-semibold text-white">Build any agent. Earn its grade, live.</h1>
-        <p className="mt-3 text-lg text-slate-300">
-          Describe what your agent does and write its policy. Backstop auto-classifies it, wires it to a real tool API, and
-          runs all 20 crash tests against it <b className="text-white">live</b> — real model calls, real decisions. The result
-          sets the price, and we auto-generate a custom dashboard for it.
-        </p>
-      </header>
+    <div className="space-y-10">
+      <Reveal y={20}>
+        <header className="card-raised relative overflow-hidden p-8 md:p-12">
+          <GlowBackdrop intensity={0.9} />
+          <div className="relative max-w-3xl">
+            <div className="eyebrow mb-4"><span className="h-2 w-2 rounded-full bg-brand" /> Agent-maker studio</div>
+            <h1 className="font-display text-5xl font-semibold leading-[0.9] tracking-tighter2 text-white md:text-6xl">
+              Build any agent.<br />Earn its grade, <span className="text-gold">live</span>.
+            </h1>
+            <p className="handwriting mt-4 text-xl text-brand-soft/90">the submission desk</p>
+            <p className="mt-5 max-w-2xl text-lg leading-relaxed text-slate-300">
+              Describe what your agent does and write its policy. Backstop auto-classifies it, wires it to a real tool API, and
+              runs all 20 crash tests against it <b className="text-white">live</b> — real model calls, real decisions. The result
+              sets the price, and we auto-generate a custom dashboard for it.
+            </p>
+          </div>
+        </header>
+      </Reveal>
 
       {llmOff && (
-        <div className="card border-warn/30 bg-warn/5 p-4 text-sm text-warn">
-          No LLM keys are configured on the server. Set <span className="font-mono">NVIDIA_API_KEYS</span> in <span className="font-mono">backstop/.env</span> to run live agents.
-        </div>
+        <Reveal y={14}>
+          <div className="card border-warn/30 bg-warn/5 p-4 text-sm text-warn">
+            No LLM keys are configured on the server. Set <span className="font-mono">NVIDIA_API_KEYS</span> in <span className="font-mono">backstop/.env</span> to run live agents.
+          </div>
+        </Reveal>
       )}
 
-      <div className="card flex flex-wrap items-center gap-x-6 gap-y-2 border-info/20 bg-info/[0.04] p-4 text-sm text-slate-300">
-        <span className="eyebrow !text-info/90">Backup checker</span>
-        <span>
-          Every run is reviewed by a <b className="text-white">verifier model</b> that returns a structured verdict. If a run
-          isn’t at par, Backstop re-runs it on a <b className="text-white">stronger model</b> and keeps the better result —
-          so the grade reflects the real production pipeline, not a single lucky call.
-        </span>
-      </div>
+      <Reveal y={14}>
+        <div className="card flex flex-wrap items-center gap-x-6 gap-y-2 border-info/20 bg-info/[0.04] p-5 text-sm text-slate-300">
+          <span className="eyebrow !text-info/90"><ShieldIcon className="h-3.5 w-3.5" /> Backup checker</span>
+          <span className="flex-1 leading-relaxed">
+            Every run is reviewed by a <b className="text-white">verifier model</b> that returns a structured verdict. If a run
+            isn’t at par, Backstop re-runs it on a <b className="text-white">stronger model</b> and keeps the better result —
+            so the grade reflects the real production pipeline, not a single lucky call.
+          </span>
+        </div>
+      </Reveal>
 
       <div className="grid gap-8 lg:grid-cols-[1.1fr_1fr]">
-        {/* the spec */}
-        <div className="card p-6">
+        {/* the spec — the editorial submission form */}
+        <Reveal y={20} className="card p-6 md:p-8">
+          <div className="eyebrow mb-4"><span className="h-2 w-2 rounded-full bg-brand" /> The brief</div>
           {/* example ideas */}
-          <div className="mb-5">
+          <div className="mb-6">
             <span className="label">Start from an idea</span>
-            <div className="mt-2 flex flex-wrap gap-2">
+            <div className="mt-2.5 flex flex-wrap gap-2">
               {IDEAS.map((idea) => (
-                <button
+                <Tactile
                   key={idea.name}
                   type="button"
                   onClick={() => loadIdea(idea)}
@@ -134,14 +150,16 @@ export default function Studio() {
                 >
                   <span className="text-[13px] leading-none">{iconFor(idea.icon)}</span>
                   {idea.name}
-                </button>
+                </Tactile>
               ))}
             </div>
-            <p className="mt-2 text-xs text-slate-500">
+            <p className="mt-2.5 text-xs leading-relaxed text-slate-500">
               Agents can do anything — ticket buyers, bot detectors, fraud guardians, travel planners, traders, researchers.
               Load one to see the shape, then make it yours.
             </p>
           </div>
+
+          <GoldRule className="mb-6 opacity-50" />
 
           <div className="grid grid-cols-2 gap-4">
             <label className="block">
@@ -179,27 +197,28 @@ export default function Studio() {
             </select>
           </label>
           <label className="mt-4 block">
-            <span className="label">Agent policy (system prompt)</span>
+            <span className="label">Agent policy — the house style</span>
             <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={12} className="inp mt-2 resize-y font-mono text-xs leading-relaxed" />
           </label>
-          <button className="btn-primary mt-5 w-full" onClick={submit} disabled={busy || llmOff}>
+          <Tactile className="btn-primary mt-6 w-full" onClick={submit} disabled={busy || llmOff}>
             {busy ? 'Crash-testing live…' : 'Submit & crash-test'} <ArrowIcon className="h-4 w-4" />
-          </button>
-          <p className="mt-3 text-xs text-slate-500">
+          </Tactile>
+          <p className="mt-3 text-xs leading-relaxed text-slate-500">
             20 attacks run in parallel on real model calls — about a minute. A tougher policy earns a better grade and a lower premium.
           </p>
-        </div>
+        </Reveal>
 
-        {/* the live run */}
-        <div className="card p-6">
+        {/* the live run — the press proof */}
+        <Reveal y={20} delay={0.08} className="card relative overflow-hidden p-6 md:p-7">
           {!job && (
-            <div className="flex h-full min-h-[22rem] flex-col items-center justify-center text-center text-slate-500">
-              <span className="grid h-14 w-14 place-items-center rounded-2xl bg-ink-800 text-brand ring-1 ring-line"><ShieldIcon className="h-7 w-7" /></span>
-              <p className="mt-4 max-w-xs">Submit your agent to watch all 20 crash tests resolve live, then see how Backstop classifies, grades and prices it.</p>
+            <div className="relative flex h-full min-h-[22rem] flex-col items-center justify-center overflow-hidden text-center text-slate-500">
+              <div className="mesh" style={{ top: '18%', left: '50%', transform: 'translateX(-50%)', height: 220, width: 260, background: 'rgba(196,85,45,0.12)' }} />
+              <span className="relative grid h-16 w-16 place-items-center rounded-2xl bg-ink-800 text-brand shadow-glow ring-1 ring-line"><ShieldIcon className="h-8 w-8" /></span>
+              <p className="relative mt-5 max-w-xs leading-relaxed">Submit your agent to watch all 20 crash tests resolve live, then see how Backstop classifies, grades and prices it.</p>
             </div>
           )}
           {job && <LiveRun job={job} name={name} />}
-        </div>
+        </Reveal>
       </div>
     </div>
   )
@@ -210,16 +229,16 @@ function LiveRun({ job, name }) {
   const tests = job.tests || {}
   const running = job.status === 'queued' || job.status === 'running'
   return (
-    <div>
+    <div className="relative">
       <div className="mb-3 flex items-center justify-between">
-        <div className="label flex items-center gap-2">
+        <div className="eyebrow flex items-center gap-2 !text-slate-400">
           {running && <span className="h-2 w-2 animate-pulse rounded-full bg-brand" />}
           {job.status === 'done' ? 'Crash test complete' : job.status === 'error' ? 'Error' : `Testing ${name} live`}
         </div>
         <span className="font-mono text-xs text-slate-500">{done}/{job.total || 20}</span>
       </div>
       <div className="mb-4 h-1.5 overflow-hidden rounded-full bg-ink-700">
-        <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${(done / (job.total || 20)) * 100}%` }} />
+        <div className="h-full rounded-full bg-gold-sheen transition-all duration-500 ease-out-expo" style={{ width: `${(done / (job.total || 20)) * 100}%` }} />
       </div>
 
       <div className="grid grid-cols-5 gap-2">
@@ -269,8 +288,8 @@ function Result({ r }) {
 
       {/* auto-classification */}
       {(category || r.tagline || r.description) && (
-        <div className="mt-4 rounded-xl border border-line bg-ink-900/40 p-4">
-          <div className="label mb-2">Backstop classified your agent</div>
+        <div className="mt-4 rounded-2xl border border-line bg-ink-900/40 p-4">
+          <div className="eyebrow mb-2.5"><span className="h-1.5 w-1.5 rounded-full bg-brand" /> Backstop classified your agent</div>
           <div className="flex flex-wrap items-center gap-2">
             {category && (
               <span className={`chip ${a.bg} ${a.text} ${a.ring} ring-1 border-transparent`}>
@@ -282,7 +301,7 @@ function Result({ r }) {
               <span className="chip font-mono text-[11px] text-slate-400">{r.use_case_type}</span>
             )}
           </div>
-          {r.tagline && <p className="mt-3 font-display text-base text-white">{r.tagline}</p>}
+          {r.tagline && <p className="mt-3 font-display text-lg font-semibold tracking-tightish text-white">{r.tagline}</p>}
           {r.description && <p className="mt-1.5 text-sm leading-relaxed text-slate-400">{r.description}</p>}
           <p className="mt-3 flex items-center gap-1.5 text-xs text-brand/90">
             <span>✨</span> A custom dashboard was auto-generated for this agent.
@@ -290,27 +309,27 @@ function Result({ r }) {
         </div>
       )}
 
-      <div className="mt-3 grid grid-cols-3 gap-3 text-sm">
-        <Mini k="Score" v={`${g.score}`} sub={`${g.passed_tests}/${g.total_tests}`} />
-        <Mini k="Mistake rate" v={oneIn(q.frequency)} />
-        <Mini k="Per-incident" v={usd(q.per_incident_limit_usd, 0)} />
-      </div>
+      <Stagger className="mt-3 grid grid-cols-3 gap-3 text-sm" gap={0.07}>
+        <motion.div variants={stagItem}><Mini k="Score" v={`${g.score}`} sub={`${g.passed_tests}/${g.total_tests}`} /></motion.div>
+        <motion.div variants={stagItem}><Mini k="Mistake rate" v={oneIn(q.frequency)} /></motion.div>
+        <motion.div variants={stagItem}><Mini k="Per-incident" v={usd(q.per_incident_limit_usd, 0)} /></motion.div>
+      </Stagger>
       <div className="mt-3 rounded-lg border border-line bg-ink-900/50 p-3 font-mono text-[11px] text-slate-500">
         id {r.identity?.agent_id} · model {r.model} · sig {r.identity?.signature?.slice(0, 12)}…
         {r.escalation_model && <div className="mt-1">backup checker escalates to {r.escalation_model} · {r.escalations || 0} used</div>}
       </div>
-      <Link to={`/agent/${r.id}`} className="btn-primary mt-4 w-full">
+      <Tactile as={Link} to={`/agent/${r.id}`} className="btn-primary mt-4 w-full">
         {declined ? 'See why it was declined' : `View ${r.name} on the shelf`} <ArrowIcon className="h-4 w-4" />
-      </Link>
+      </Tactile>
     </div>
   )
 }
 
 function Mini({ k, v, sub }) {
   return (
-    <div className="rounded-lg border border-line bg-ink-900/40 p-3">
+    <div className="rounded-xl border border-line bg-ink-900/40 p-3 transition-colors hover:border-brand/30">
       <div className="label">{k}</div>
-      <div className="mt-0.5 font-display text-lg text-white">{v}</div>
+      <div className="mt-0.5 font-display text-lg font-semibold tracking-tightish text-white">{v}</div>
       {sub && <div className="text-[10px] text-slate-500">{sub}</div>}
     </div>
   )

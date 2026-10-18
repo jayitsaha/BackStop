@@ -44,17 +44,30 @@ import { Link } from 'react-router-dom'
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid,
 } from 'recharts'
+import { motion, AnimatePresence } from 'framer-motion'
 import api from '../../api'
 import { usd, cents, pct } from '../../lib/format'
 import { GradePill, VerifiedMark, ShieldIcon, CheckIcon, XIcon, ArrowIcon } from '../marks'
 import { RunTimeline } from '../widgets/shared.jsx'
+import { Reveal, Stagger, stagItem, Tactile } from '../../components/ui/motion.jsx'
+import DotField from '../../components/ui/DotField.jsx'
+import { GlowBackdrop, GoldRule } from '../../components/ui/Backdrop.jsx'
 
 /* -------------------------------------------------------------------- palette + seed */
-const GOLD = '#F2C14E'
-const GREEN = '#3FD99A'
-const BLUE = '#6E8BFF'
-const SLATE = '#64748b'
-const SLICE = [GOLD, BLUE, GREEN, '#F8D98A', '#A8BBFF', '#F2B441', '#94a3b8']
+/* "Mocha Noir" data-viz palette — burnt terracotta + warm accents over espresso surfaces */
+const MOCHA = '#c4552d'
+const BRAND_SOFT = '#e8865f'
+const CLAY = '#e8612e'
+const SAGE = '#61b166'
+const GOLD = '#f0bd36'
+const ROSE = '#dd6381'
+const TAN = '#b8a07a'
+const SLATE = '#6c6b68'
+const SURFACE = '#171310' // tooltip / card surface
+const BORDER = '#3a342f'  // hairline
+const AXIS = '#8b8a87'    // axis + muted text
+const INKBG = '#0b0908'   // page background (donut stroke)
+const SLICE = [MOCHA, GOLD, SAGE, BRAND_SOFT, CLAY, ROSE, TAN]
 
 const SEED_HOLDINGS = [
   { asset: 'AAPL', weight_pct: 48, kind: 'equity' },
@@ -190,27 +203,33 @@ export default function QuantPage({ agentId, agent, customer, agentName }) {
       <TrustStrip name={name} tagline={agent?.tagline} grade={grade} quote={quote} />
 
       {/* ⚡ ONE-TAP AUTONOMY: analyze → risk-check → execute, zero further clicks */}
-      <AutoPilotStrip name={name} agentId={aid} stateRef={stateRef} />
+      <Reveal delay={0.04}>
+        <AutoPilotStrip name={name} agentId={aid} stateRef={stateRef} />
+      </Reveal>
 
       {/* PRIMARY, AUTO-RUN: Quant's live proposal (no clicks needed) */}
-      <ProposalHero
-        name={name}
-        plan={plan}
-        busy={planBusy}
-        err={planErr}
-        planMeta={planMeta}
-        dirty={dirty}
-        goal={goal}
-        onGoal={editGoal}
-        onPreset={applyGoal}
-        onReplan={() => runPlan(true)}
-      />
+      <Reveal delay={0.04}>
+        <ProposalHero
+          name={name}
+          plan={plan}
+          busy={planBusy}
+          err={planErr}
+          planMeta={planMeta}
+          dirty={dirty}
+          goal={goal}
+          onGoal={editGoal}
+          onPreset={applyGoal}
+          onReplan={() => runPlan(true)}
+        />
+      </Reveal>
 
       {/* PRIMARY, AUTO-RUN: pre-judged market noise feed */}
-      <MarketBriefing name={name} />
+      <Reveal>
+        <MarketBriefing name={name} />
+      </Reveal>
 
       {/* SECONDARY: tweak the book / limits and re-plan, plus guardrails + manual tip test */}
-      <div className="grid gap-6 xl:grid-cols-[1.35fr_1fr]">
+      <Reveal className="grid gap-6 xl:grid-cols-[1.35fr_1fr]">
         <TweakEditor
           name={name}
           holdings={holdings}
@@ -228,15 +247,17 @@ export default function QuantPage({ agentId, agent, customer, agentName }) {
           <GuardrailsPanel limits={limits} audit={liveAudit} />
           <TipSniffTest />
         </div>
-      </div>
+      </Reveal>
 
       {/* APPROVE: hand the proposal to Quant to carry through and confirm */}
-      <ExecutePanel name={name} agentId={aid} holdings={holdings} limits={limits} plan={plan} />
+      <Reveal>
+        <ExecutePanel name={name} agentId={aid} holdings={holdings} limits={limits} plan={plan} />
+      </Reveal>
 
-      <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+      <Reveal className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <ActivityFeed runs={customer?.runs} agentName={name} />
         <InsuranceStrip quote={quote} grade={grade} />
-      </div>
+      </Reveal>
     </div>
   )
 }
@@ -269,11 +290,11 @@ function ProposalHero({ name, plan, busy, err, planMeta, dirty, goal, onGoal, on
   const fromUser = !!planMeta?.fromUser
   return (
     <div className="card-raised relative overflow-hidden p-6">
-      <div className="mesh" style={{ top: -80, right: '6%', height: 180, width: 220, background: 'rgba(242,193,78,0.12)' }} />
+      <div className="mesh" style={{ top: -80, right: '6%', height: 180, width: 220, background: 'rgba(196,85,45,0.14)' }} />
       <div className="relative">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="eyebrow mb-1">
+            <div className="eyebrow mb-1 !font-mono">
               <span className="relative flex h-2 w-2">
                 <span className={`absolute inline-flex h-full w-full rounded-full bg-brand opacity-60 ${busy ? 'animate-ping' : ''}`} />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-brand" />
@@ -282,13 +303,13 @@ function ProposalHero({ name, plan, busy, err, planMeta, dirty, goal, onGoal, on
               {!busy && plan && !fromUser && <span className="chip !ml-1 !px-2 !py-0 border-line text-[10px] text-slate-500">sample book</span>}
             </div>
             {busy ? (
-              <h2 className="font-display text-2xl tracking-tightish text-white">
+              <h2 className="font-display text-2xl tracking-tighter2 text-white">
                 {fromUser ? `${name} is working toward your goal…` : `${name} is analyzing a sample book…`}
               </h2>
             ) : head ? (
-              <h2 className={`font-display text-2xl tracking-tightish ${toneCls}`}>{head.text}</h2>
+              <h2 className={`font-display text-[1.75rem] leading-tight tracking-tighter2 ${toneCls}`}>{head.text}</h2>
             ) : (
-              <h2 className="font-display text-2xl tracking-tightish text-white">Proposal unavailable</h2>
+              <h2 className="font-display text-2xl tracking-tighter2 text-white">Proposal unavailable</h2>
             )}
             {!busy && plan && (
               fromUser ? (
@@ -299,10 +320,10 @@ function ProposalHero({ name, plan, busy, err, planMeta, dirty, goal, onGoal, on
             )}
           </div>
           {!busy && (
-            <button onClick={onReplan} className="btn-ghost relative whitespace-nowrap !py-2 text-sm">
+            <Tactile onClick={onReplan} className="btn-ghost relative whitespace-nowrap !py-2 text-sm">
               Re-plan
               {dirty && <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-brand ring-2 ring-ink-850" />}
-            </button>
+            </Tactile>
           )}
         </div>
 
@@ -396,19 +417,20 @@ function AutoPilotStrip({ name, agentId, stateRef }) {
   const cur = AP_ORDER[stage]
   return (
     <div className="card-raised relative overflow-hidden p-6">
-      <div className="mesh" style={{ top: -80, left: '2%', height: 200, width: 280, background: 'rgba(242,193,78,0.14)' }} />
+      <div className="mesh" style={{ top: -80, left: '2%', height: 200, width: 280, background: 'rgba(196,85,45,0.18)' }} />
+      <div className="mesh" style={{ bottom: -90, right: '6%', height: 170, width: 210, background: 'rgba(224,122,70,0.10)' }} />
       <div className="relative">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="min-w-0">
-            <div className="eyebrow mb-1">⚡ Auto-pilot</div>
-            <h2 className="font-display text-2xl tracking-tightish text-white">Let {name} run the whole rebalance</h2>
-            <p className="mt-1 max-w-xl text-sm text-slate-400">
+            <div className="eyebrow mb-2 !font-mono">⚡ Auto-pilot</div>
+            <h2 className="font-display text-3xl tracking-tighter2 text-white">Let {name} run the whole rebalance</h2>
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-400">
               One tap and {name} analyzes your book, checks it against your risk limits, and executes the rebalance end to end.
             </p>
           </div>
-          <button onClick={engage} disabled={running} className="btn-primary whitespace-nowrap">
+          <Tactile onClick={engage} disabled={running} className="btn-primary whitespace-nowrap px-5 py-3 text-[15px]">
             {running ? 'Auto-pilot running…' : stage === 'done' ? (<>Run auto-pilot again <ArrowIcon className="h-4 w-4" /></>) : (<>⚡ Engage auto-pilot</>)}
-          </button>
+          </Tactile>
         </div>
 
         {(running || stage === 'done') && (
@@ -442,48 +464,77 @@ function AutoPilotStrip({ name, agentId, stateRef }) {
   )
 }
 
-/* -------------------------------------------------------------------------- trust strip */
+/* -------------------------------------------------------------------- cinematic hero */
 function TrustStrip({ name, tagline, grade, quote }) {
+  const gradeLabel = grade?.grade ? `GRADE ${String(grade.grade).toUpperCase()}` : 'UNGRADED'
   return (
-    <div className="card-raised relative overflow-hidden p-6">
-      <div className="mesh" style={{ top: -90, right: '2%', height: 200, width: 260, background: 'rgba(242,193,78,0.14)' }} />
-      <div className="relative flex flex-wrap items-start justify-between gap-5">
-        <div className="min-w-0">
-          <div className="eyebrow mb-2">
+    <section className="card-raised relative overflow-hidden px-6 py-10 md:px-10 md:py-14">
+      {/* warm ambient backdrop: mocha glow + dot-matrix field + vignette */}
+      <GlowBackdrop intensity={1.15} />
+      {/* a quiet ticker-tape of dots along the top edge for terminal texture */}
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 h-24 opacity-60"
+        style={{ maskImage: 'linear-gradient(180deg,#000,transparent)', WebkitMaskImage: 'linear-gradient(180deg,#000,transparent)' }}
+        aria-hidden
+      >
+        <DotField cell={8} speed={0.06} opacity={0.5} />
+      </div>
+
+      <div className="relative mx-auto max-w-5xl">
+        <Reveal as="div" y={10}>
+          <span className="eyebrow !font-mono !tracking-[0.3em]">
             <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand opacity-60" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-brand" />
             </span>
-            Portfolio desk · live
-          </div>
-          <h1 className="flex items-center gap-2 font-display text-3xl font-semibold tracking-tightish text-white">
-            {name}
-            <span className="text-gold font-display text-xl">· the disciplined desk</span>
-          </h1>
-          <p className="mt-2 max-w-xl text-sm text-slate-400">{tagline || 'Disciplined portfolio management that never exceeds your risk limits.'}</p>
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <VerifiedMark />
-            <GradePill grade={grade.grade} score={grade.score} />
-            <span className="chip border-safe/30 bg-safe/10 text-safe">
-              <ShieldIcon className="h-3.5 w-3.5" /> Insured
-            </span>
-          </div>
-        </div>
-        <div className="flex gap-3">
+            Trading&nbsp;·&nbsp;{gradeLabel}
+          </span>
+        </Reveal>
+
+        <Reveal as="h1" delay={0.06} y={22} className="mt-6 font-display text-6xl font-semibold leading-[0.88] tracking-tighter3 text-white md:text-8xl">
+          {name}<span className="text-gold">.</span>
+        </Reveal>
+
+        <Reveal as="div" delay={0.12} className="mt-4 flex items-baseline gap-3">
+          <p className="font-display text-xl italic text-brand-soft md:text-2xl">the disciplined desk</p>
+          <span className="handwriting text-base text-brand-soft/70">discipline over hype.</span>
+        </Reveal>
+
+        <Reveal as="p" delay={0.16} className="mt-5 max-w-xl text-base leading-relaxed text-slate-400">
+          {tagline || 'Disciplined portfolio management that never exceeds your risk limits — it honors every guardrail, refuses hyped tips, and confirms before it trades.'}
+        </Reveal>
+
+        <Reveal delay={0.2} className="mt-6 flex flex-wrap items-center gap-2">
+          <VerifiedMark />
+          <GradePill grade={grade.grade} score={grade.score} />
+          <span className="chip border-safe/30 bg-safe/10 text-safe">
+            <ShieldIcon className="h-3.5 w-3.5" /> Insured
+          </span>
+          <span className="chip border-info/30 bg-info/5 !font-mono text-[11px] text-info-soft">risk-aware · limit-first</span>
+        </Reveal>
+
+        <Reveal delay={0.26} className="mt-8 max-w-3xl">
+          <GoldRule />
+        </Reveal>
+
+        {/* live terminal stats band — figures in mono */}
+        <Stagger className="mt-7 grid max-w-3xl grid-cols-2 gap-3 sm:grid-cols-4" gap={0.07}>
           <Metric label="Premium / trade" value={cents(quote.gross_premium_usd)} tone="text-brand-soft" />
           <Metric label="Covered / incident" value={usd(quote.per_incident_limit_usd, 0)} tone="text-safe" />
-        </div>
+          <Metric label="Crash grade" value={grade?.grade || '—'} tone="text-gold" />
+          <Metric label="Grade score" value={grade?.score != null ? String(grade.score) : '—'} tone="text-white" />
+        </Stagger>
       </div>
-    </div>
+    </section>
   )
 }
 
 function Metric({ label, value, tone = 'text-white' }) {
   return (
-    <div className="rounded-xl border border-line bg-ink-900/50 px-4 py-3 text-right">
-      <div className={`stat-num text-2xl ${tone}`}>{value}</div>
-      <div className="label mt-0.5">{label}</div>
-    </div>
+    <motion.div variants={stagItem} className="rounded-xl border border-line bg-ink-900/50 px-4 py-3 backdrop-blur-sm">
+      <div className={`font-mono text-2xl font-medium tracking-tight ${tone}`}>{value}</div>
+      <div className="label mt-1">{label}</div>
+    </motion.div>
   )
 }
 
@@ -506,17 +557,17 @@ function TweakEditor({ name, holdings, setHoldings, limits, setLimits, goal, set
 
   return (
     <div className="card relative overflow-hidden p-6">
-      <div className="mesh" style={{ top: -80, right: '6%', height: 170, width: 190, background: 'rgba(242,193,78,0.10)' }} />
+      <div className="mesh" style={{ top: -80, right: '6%', height: 170, width: 190, background: 'rgba(196,85,45,0.12)' }} />
       <div className="relative">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <div className="eyebrow mb-1">Tweak &amp; re-plan</div>
-            <h3 className="font-display text-xl tracking-tightish text-white">Holdings &amp; risk limits</h3>
+            <div className="eyebrow mb-1 !font-mono">Tweak &amp; re-plan</div>
+            <h3 className="font-display text-xl tracking-tighter2 text-white">Holdings &amp; risk limits</h3>
             <p className="mt-1 text-sm text-slate-400">The proposal above runs on an example book. Replace it with your real holdings and limits, then Re-plan to make the proposal yours.</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {dirty && <span className="chip !px-2 border-brand/30 bg-brand/10 text-[11px] text-brand-soft">unsaved edits</span>}
-            <span className={`chip !px-2.5 ${Math.round(total) === 100 ? 'border-line text-slate-400' : 'border-warn/30 bg-warn/10 text-warn'}`}>
+            <span className={`chip !px-2.5 !font-mono tabular-nums ${Math.round(total) === 100 ? 'border-line text-slate-400' : 'border-warn/30 bg-warn/10 text-warn'}`}>
               {Math.round(total)}% allocated
             </span>
           </div>
@@ -578,9 +629,9 @@ function TweakEditor({ name, holdings, setHoldings, limits, setLimits, goal, set
             className="inp resize-none text-sm" />
         </div>
 
-        <button onClick={onReplan} disabled={busy} className="btn-primary mt-4 w-full">
+        <Tactile onClick={onReplan} disabled={busy} className="btn-primary mt-4 w-full">
           {busy ? 'Quant is re-modeling the book…' : dirty ? 'Re-plan with your changes' : 'Re-plan'}
-        </button>
+        </Tactile>
       </div>
     </div>
   )
@@ -638,12 +689,12 @@ function PlanResult({ plan }) {
               <div className="h-56 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={donut} dataKey="value" nameKey="name" innerRadius={52} outerRadius={82} paddingAngle={2} stroke="#0A0D14" strokeWidth={2}>
+                    <Pie data={donut} dataKey="value" nameKey="name" innerRadius={52} outerRadius={82} paddingAngle={2} stroke={INKBG} strokeWidth={2}>
                       {donut.map((_, i) => <Cell key={i} fill={SLICE[i % SLICE.length]} />)}
                     </Pie>
                     <Tooltip formatter={(v, n) => [`${num(v).toFixed(1)}%`, n]}
-                      contentStyle={{ background: '#0E121B', border: '1px solid #242b3b', borderRadius: 12, color: '#fff' }} />
-                    <Legend wrapperStyle={{ fontSize: 11, color: '#94a3b8' }} />
+                      contentStyle={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 12, color: '#fff', fontFamily: 'Geist Mono, monospace' }} />
+                    <Legend wrapperStyle={{ fontSize: 11, color: AXIS }} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -655,14 +706,14 @@ function PlanResult({ plan }) {
               <div className="h-56 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={bars} margin={{ top: 8, right: 8, left: -14, bottom: 0 }}>
-                    <CartesianGrid stroke="#242b3b" vertical={false} />
-                    <XAxis dataKey="asset" tick={{ fill: SLATE, fontSize: 11 }} stroke="#242b3b" />
-                    <YAxis tick={{ fill: SLATE, fontSize: 11 }} stroke="#242b3b" unit="%" />
-                    <Tooltip formatter={(v, n) => [`${num(v).toFixed(1)}%`, n]}
-                      contentStyle={{ background: '#0E121B', border: '1px solid #242b3b', borderRadius: 12, color: '#fff' }} labelStyle={{ color: '#94a3b8' }} />
+                    <CartesianGrid stroke={BORDER} vertical={false} />
+                    <XAxis dataKey="asset" tick={{ fill: AXIS, fontSize: 11 }} stroke={BORDER} />
+                    <YAxis tick={{ fill: AXIS, fontSize: 11 }} stroke={BORDER} unit="%" />
+                    <Tooltip cursor={{ fill: 'rgba(196,85,45,0.08)' }} formatter={(v, n) => [`${num(v).toFixed(1)}%`, n]}
+                      contentStyle={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 12, color: '#fff', fontFamily: 'Geist Mono, monospace' }} labelStyle={{ color: AXIS }} />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
                     <Bar dataKey="Current" fill={SLATE} radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="Target" fill={GOLD} radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="Target" fill={MOCHA} radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -674,7 +725,10 @@ function PlanResult({ plan }) {
       {/* trades blotter */}
       {trades.length > 0 && (
         <div>
-          <div className="label mb-2">Proposed trades</div>
+          <div className="mb-2 flex items-center justify-between">
+            <div className="label">Proposed trades</div>
+            <span className="chip !px-2 !py-0.5 border-line !font-mono text-[11px] text-slate-400">blotter · {trades.length}</span>
+          </div>
           <div className="overflow-x-auto rounded-xl border border-line">
             <table className="w-full text-left text-sm">
               <thead>
@@ -718,10 +772,10 @@ const ACTION_TONE = {
 function TradeRow({ t }) {
   const a = ACTION_TONE[String(t.action || 'hold').toLowerCase()] || ACTION_TONE.hold
   return (
-    <tr className="border-b border-line/60 last:border-0">
+    <tr className="border-b border-line/60 transition-colors last:border-0 hover:bg-ink-900/40">
       <td className="px-3 py-2.5"><span className={`chip !px-2 !py-0.5 font-mono text-[11px] ${a.chip}`}>{a.label}</span></td>
-      <td className="px-3 py-2.5 font-mono text-slate-200">{t.asset}</td>
-      <td className="px-3 py-2.5 text-slate-300">{num(t.amount_pct).toFixed(1)}%</td>
+      <td className="px-3 py-2.5 font-mono font-medium text-slate-200">{t.asset}</td>
+      <td className="px-3 py-2.5 font-mono tabular-nums text-slate-300">{num(t.amount_pct).toFixed(1)}%</td>
       <td className="px-3 py-2.5 text-xs text-slate-400">{t.reason}</td>
     </tr>
   )
@@ -739,8 +793,8 @@ function GuardrailsPanel({ limits, audit }) {
       <div className="relative">
         <div className="mb-3 flex items-center justify-between">
           <div>
-            <div className="eyebrow mb-1">Guardrails</div>
-            <h3 className="font-display text-xl tracking-tightish text-white">Risk mandate</h3>
+            <div className="eyebrow mb-1 !font-mono">Guardrails</div>
+            <h3 className="font-display text-xl tracking-tighter2 text-white">Risk mandate</h3>
           </div>
           <span className={`chip ${audit.within_limits ? 'border-safe/30 bg-safe/10 text-safe' : 'border-bad/30 bg-bad/10 text-bad'}`}>
             {audit.within_limits ? <CheckIcon className="h-3.5 w-3.5" /> : <XIcon className="h-3.5 w-3.5" />}
@@ -803,18 +857,18 @@ function MarketBriefing({ name }) {
 
   return (
     <div className="card relative overflow-hidden p-6">
-      <div className="mesh" style={{ top: -70, left: '4%', height: 160, width: 200, background: 'rgba(110,139,255,0.07)' }} />
+      <div className="mesh" style={{ top: -70, left: '4%', height: 160, width: 200, background: 'rgba(42,198,228,0.07)' }} />
       <div className="relative">
         <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="eyebrow mb-1">
+            <div className="eyebrow mb-1 !font-mono !text-info">
               <span className="relative flex h-2 w-2">
                 <span className={`absolute inline-flex h-full w-full rounded-full bg-info opacity-60 ${busy ? 'animate-ping' : ''}`} />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-info" />
               </span>
               Market noise · auto-scanned
             </div>
-            <h3 className="font-display text-xl tracking-tightish text-white">What {name} is ignoring today</h3>
+            <h3 className="font-display text-xl tracking-tighter2 text-white">What {name} is ignoring today</h3>
             <p className="mt-1 max-w-xl text-sm text-slate-400">
               {busy ? `${name} is scanning today's headlines and DMs…` : data?.summary || `${name} pre-judged today's market noise against your mandate.`}
             </p>
@@ -885,26 +939,34 @@ function TipSniffTest() {
   const tone = res ? (REC_TONE[String(res.recommendation).toLowerCase()] || REC_TONE.ignore) : null
   return (
     <div className="card relative overflow-hidden p-6">
+      <div className="mesh" style={{ top: -70, right: '4%', height: 150, width: 180, background: 'rgba(221,99,129,0.07)' }} />
       <div className="relative">
-        <div className="eyebrow mb-1">Test Quant yourself</div>
-        <h3 className="font-display text-xl tracking-tightish text-white">Hot-tip sniff-test</h3>
+        <div className="eyebrow mb-1 !font-mono">Test Quant yourself</div>
+        <h3 className="font-display text-xl tracking-tighter2 text-white">Hot-tip sniff-test</h3>
         <p className="mt-1 text-sm text-slate-400">Quant already judged today's noise above. Paste your own "hot tip", DM or headline — it refuses hype and smuggled instructions.</p>
 
         <textarea value={tip} onChange={(e) => setTip(e.target.value)} rows={3}
           placeholder="Paste the tip or news here…" className="inp mt-3 resize-none text-sm" />
         <div className="mt-2 flex items-center gap-3">
-          <button onClick={run} disabled={busy || !tip.trim()} className="btn-ghost !py-2 text-sm">
+          <Tactile onClick={run} disabled={busy || !tip.trim()} className="btn-ghost !py-2 text-sm">
             {busy ? 'Evaluating…' : 'Evaluate tip'}
-          </button>
+          </Tactile>
           <button onClick={() => setTip(SAMPLE_TIP)} className="text-xs text-brand/90 hover:text-brand-soft">try a hype sample</button>
         </div>
         {err && <div className="mt-3 rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-xs text-bad">{err}</div>}
 
+        <AnimatePresence>
         {res && tone && (
-          <div className="mt-4 animate-fade-up space-y-3">
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+            className="mt-4 space-y-3"
+          >
             <div className="flex flex-wrap items-center gap-2">
               <span className={`chip ${tone.chip}`}>{tone.label}</span>
-              <span className="chip border-line text-slate-400">risk · {res.risk_flag}</span>
+              <span className="chip border-line !font-mono text-slate-400">risk · {res.risk_flag}</span>
               {res.is_injection_or_hype && (
                 <span className="chip border-bad/40 bg-bad/10 text-bad"><ShieldIcon className="h-3.5 w-3.5" /> hype / injection caught</span>
               )}
@@ -912,8 +974,9 @@ function TipSniffTest() {
             <div className="rounded-xl border border-line bg-ink-900/50 p-4 text-sm leading-relaxed text-slate-300">
               {res.rationale}
             </div>
-          </div>
+          </motion.div>
         )}
+        </AnimatePresence>
       </div>
     </div>
   )
@@ -976,21 +1039,21 @@ function ExecutePanel({ name, agentId, holdings, limits, plan }) {
 
   return (
     <div className="card relative overflow-hidden p-6">
-      <div className="mesh" style={{ top: -70, left: '4%', height: 160, width: 200, background: 'rgba(63,217,154,0.08)' }} />
+      <div className="mesh" style={{ top: -70, left: '4%', height: 160, width: 200, background: 'rgba(97,177,102,0.10)' }} />
       <div className="relative">
         <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="eyebrow mb-1">Approve &amp; execute</div>
-            <h3 className="font-display text-xl tracking-tightish text-white">
+            <div className="eyebrow mb-1 !font-mono !text-safe">Approve &amp; execute</div>
+            <h3 className="font-display text-2xl tracking-tighter2 text-white">
               {proposed.length ? `Approve ${name}'s ${proposed.length} proposed trade${proposed.length === 1 ? '' : 's'}` : `Ask ${name} to execute`}
             </h3>
             <p className="mt-1 max-w-xl text-sm text-slate-400">
               Approve and {name} validates the plan against your risk limits, fills the orders and rebalances your portfolio to target — then confirms with a reference you can track.
             </p>
           </div>
-          <button onClick={execute} disabled={busy} className="btn-primary whitespace-nowrap">
+          <Tactile onClick={execute} disabled={busy} className="btn-primary whitespace-nowrap px-5 py-3 text-[15px]">
             {busy ? 'Executing…' : (<>Approve &amp; execute <ArrowIcon className="h-4 w-4" /></>)}
-          </button>
+          </Tactile>
         </div>
         {err && <div className="mt-3 rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-xs text-bad">{err}</div>}
         {result && <div className="mt-4"><ExecuteSuccessCard result={result} name={name} /></div>}
@@ -1005,8 +1068,8 @@ function ActivityFeed({ runs, agentName }) {
   return (
     <div className="card relative overflow-hidden p-6">
       <div className="relative">
-        <div className="eyebrow mb-1">Activity</div>
-        <h3 className="font-display text-xl tracking-tightish text-white">Desk history</h3>
+        <div className="eyebrow mb-1 !font-mono">Activity</div>
+        <h3 className="font-display text-xl tracking-tighter2 text-white">Desk history</h3>
         <p className="mt-1 text-sm text-slate-400">Every run {agentName} has made on your account.</p>
         <div className="mt-4 space-y-5">
           {ordered.length === 0 ? (
@@ -1032,26 +1095,26 @@ function ActivityFeed({ runs, agentName }) {
 function InsuranceStrip({ quote, grade }) {
   return (
     <div className="card relative overflow-hidden p-6">
-      <div className="mesh" style={{ top: -60, right: '4%', height: 150, width: 170, background: 'rgba(63,217,154,0.08)' }} />
+      <div className="mesh" style={{ top: -60, right: '4%', height: 150, width: 170, background: 'rgba(97,177,102,0.10)' }} />
       <div className="relative">
-        <div className="eyebrow mb-1 text-safe">Protected by Backstop</div>
-        <h3 className="font-display text-xl tracking-tightish text-white">Insurance &amp; claims</h3>
+        <div className="eyebrow mb-1 !font-mono !text-safe">Protected by Backstop</div>
+        <h3 className="font-display text-xl tracking-tighter2 text-white">Insurance &amp; claims</h3>
         <p className="mt-1 text-sm text-slate-400">
           Crash-tested to grade <b className="text-white">{grade?.grade || '—'}</b>. If a covered mistake slips through, you're reimbursed up to the per-incident limit.
         </p>
         <div className="mt-4 grid grid-cols-2 gap-3">
           <div className="rounded-xl border border-line bg-ink-900/40 p-4">
-            <div className="stat-num text-2xl text-safe">{usd(quote?.per_incident_limit_usd, 0)}</div>
-            <div className="label mt-0.5">Covered / incident</div>
+            <div className="font-mono text-2xl font-medium tracking-tight text-safe">{usd(quote?.per_incident_limit_usd, 0)}</div>
+            <div className="label mt-1">Covered / incident</div>
           </div>
           <div className="rounded-xl border border-line bg-ink-900/40 p-4">
-            <div className="stat-num text-2xl text-brand-soft">{cents(quote?.gross_premium_usd)}</div>
-            <div className="label mt-0.5">Premium / trade</div>
+            <div className="font-mono text-2xl font-medium tracking-tight text-brand-soft">{cents(quote?.gross_premium_usd)}</div>
+            <div className="label mt-1">Premium / trade</div>
           </div>
         </div>
-        <Link to="/claims" className="btn-ghost mt-4 w-full !justify-between">
+        <Tactile as={Link} to="/claims" className="btn-ghost mt-4 w-full !justify-between">
           File or track a claim <ArrowIcon className="h-4 w-4" />
-        </Link>
+        </Tactile>
       </div>
     </div>
   )
