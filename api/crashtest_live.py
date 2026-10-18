@@ -13,18 +13,36 @@ Endpoints (mounted on the shared router, included by api.main):
 """
 from __future__ import annotations
 
-import itertools
+import os
 import threading
+import time
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
+from api import firebase
+
 router = APIRouter()
 
-# Our OWN in-memory job store (mirrors the JOBS pattern in api.main, kept separate).
-CRASH_JOBS: dict[str, dict] = {}
-_crash_job_ids = itertools.count(1)
+# Crash-test jobs. Like the maker jobs in api.main: on serverless we persist to Firebase and run the
+# work inline (no surviving background thread, no shared in-memory dict across cold instances); on a
+# long-lived server we keep the threaded, live-progress behaviour.
+ON_SERVERLESS = bool(os.environ.get("VERCEL"))
+
+
+def _crash_save(job_id: str, job: dict) -> None:
+    try:
+        firebase.db_put(f"crash_jobs/{job_id}", job)
+    except Exception:
+        pass
+
+
+def _crash_load(job_id: str) -> dict | None:
+    try:
+        return firebase.db_get(f"crash_jobs/{job_id}")
+    except Exception:
+        return None
 
 
 # --------------------------------------------------------------------- run an agent on one attack
@@ -72,14 +90,15 @@ def _run_agent_on_test(rec: dict, test: dict) -> dict:
 
 
 # --------------------------------------------------------------------- tailored suite (async job)
-def _run_tailored_job(job_id: str, rec: dict, n: int) -> None:
+def _run_tailored_job(job_id: str, job: dict, rec: dict, n: int) -> None:
     from agents.crashgen import generate_tailored_tests, score_tailored
-    job = CRASH_JOBS[job_id]
     try:
         job["status"] = "generating"
+        _crash_save(job_id, job)
         tests = generate_tailored_tests(rec, n=n)
         job["total"] = len(tests)
         job["status"] = "running"
+        _crash_save(job_id, job)
         results = []
         passed_count = 0
         for i, test in enumerate(tests):
@@ -105,6 +124,8 @@ def _run_tailored_job(job_id: str, rec: dict, n: int) -> None:
             })
             job["done"] = i + 1
             job["results"] = results
+            if not ON_SERVERLESS:          # live progress for the polled (local) path
+                _crash_save(job_id, job)
         total = len(tests) or 1
         score = round(100.0 * passed_count / total, 1)
         job["score"] = score
@@ -112,9 +133,11 @@ def _run_tailored_job(job_id: str, rec: dict, n: int) -> None:
         job["passed"] = passed_count
         job["tests"] = results
         job["status"] = "done"
+        _crash_save(job_id, job)
     except Exception as e:
         job["status"] = "error"
         job["error"] = f"{type(e).__name__}: {e}"
+        _crash_save(job_id, job)
 
 
 def _letter(score: float) -> str:
@@ -136,19 +159,24 @@ def tailored(agent_id: str, n: int = 6, authorization: str = Header(None)):
     from api.main import current_user
     current_user(authorization)
     rec = _agent(agent_id)
-    job_id = f"crash-{next(_crash_job_ids)}"
-    CRASH_JOBS[job_id] = {
+    job_id = f"crash-{int(time.time() * 1000)}"
+    job = {
         "status": "queued", "done": 0, "total": max(1, n), "agent": agent_id,
         "name": rec.get("name"), "use_case_type": rec.get("use_case_type"),
         "results": [], "created_at": datetime.now(timezone.utc).isoformat(),
     }
-    threading.Thread(target=_run_tailored_job, args=(job_id, rec, max(1, min(n, 10))), daemon=True).start()
-    return {"job_id": job_id, "status": "queued"}
+    _crash_save(job_id, job)
+    n_run = max(1, min(n, 10))
+    if ON_SERVERLESS:
+        _run_tailored_job(job_id, job, rec, n_run)        # inline; persists result to Firebase
+    else:
+        threading.Thread(target=_run_tailored_job, args=(job_id, job, rec, n_run), daemon=True).start()
+    return {"job_id": job_id, "status": job.get("status", "queued")}
 
 
 @router.get("/crash-jobs/{job_id}")
 def crash_job(job_id: str):
-    job = CRASH_JOBS.get(job_id)
+    job = _crash_load(job_id)
     if not job:
         raise HTTPException(404, "unknown crash job")
     return job

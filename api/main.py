@@ -66,8 +66,26 @@ for _mod in ("pagegen", "crashtest_live", "rl", "litigation", "chain", "payments
         print(f"[router] {_mod} not mounted: {_exc}")
 
 ledger = Ledger()
-JOBS: dict[str, dict] = {}            # maker crash-test jobs (in-memory, polled)
-_job_ids = itertools.count(1)
+
+# On Vercel each request may land on a different (cold/frozen) serverless instance, so background
+# daemon threads don't survive the response and an in-memory job dict isn't shared across polls.
+# When running serverless we persist job state to Firebase and run the work INLINE; on a long-lived
+# server (local / container) we keep the original threaded, in-memory, live-progress behaviour.
+ON_SERVERLESS = bool(os.environ.get("VERCEL"))
+
+
+def _job_save(job_id: str, job: dict) -> None:
+    try:
+        firebase.db_put(f"maker_jobs/{job_id}", job)
+    except Exception:
+        pass
+
+
+def _job_load(job_id: str) -> dict | None:
+    try:
+        return firebase.db_get(f"maker_jobs/{job_id}")
+    except Exception:
+        return None
 REFERENCE = {"Sage": "Penny Labs", "Quill": "Quill Co", "Dash": "Dash Inc"}
 REFERENCE_BLURB = {
     "Sage": "The careful reference agent — verifies every payment against the mandate before it moves money.",
@@ -227,39 +245,64 @@ def _all_agents() -> list[dict]:
 
 
 # ============================ startup: seed reference agents ============================
+_SEEDED = False
+
+
+def ensure_seeded() -> None:
+    """Idempotently seed reference agents + rebind the in-memory insurance ledger. Does its work once
+    per process and no-ops thereafter, so it is safe to call on every request. Runs from the startup
+    event on long-lived servers, and from an HTTP middleware on serverless — where the ASGI adapter
+    may skip lifespan events entirely and every cold instance starts with a fresh, empty ledger."""
+    global _SEEDED
+    if _SEEDED:
+        return
+    try:
+        existing = {a.get("name") for a in _all_agents()}
+        for name in ["Sage", "Quill", "Dash"]:
+            if name in existing:
+                rec = firebase.db_get(f"agents/{name}")
+                # backfill marketplace metadata + dashboard for agents seeded before the pivot
+                if rec and not rec.get("use_case_type"):
+                    patch = {k: v for k, v in dict(REFERENCE_ENRICH).items()}
+                    firebase.db_patch(f"agents/{name}", patch)
+                    rec = {**rec, **patch}
+                if rec and not rec.get("ui_schema"):
+                    _pagegen_hook(rec)
+                if rec:
+                    _bind(rec)
+                continue
+            try:
+                suite = run_suite(REGISTRY[name], ROOT)                      # instant (scripted)
+                runs = [r.to_dict() for r in suite.runs]
+                rec = _record(name, suite.version, REFERENCE[name], "reference", suite.grade, runs,
+                              TERMS.get("runs_per_test", 3), agent_id=name, enrich=dict(REFERENCE_ENRICH))
+                rec["blurb"] = REFERENCE_BLURB.get(name)
+                firebase.db_put(f"agents/{name}", rec)
+                _pagegen_hook(rec)
+                _bind(rec)
+            except Exception as e:
+                print(f"[seed] {name} failed: {e}")
+        # rebind any maker agents that already exist
+        for a in _all_agents():
+            if a.get("kind") == "llm" and a.get("listed"):
+                try:
+                    _bind(a)
+                except Exception:
+                    pass
+        _SEEDED = True
+    except Exception as e:                      # Firebase unreachable etc — retry on the next request
+        print(f"[seed] ensure_seeded deferred: {e}")
+
+
 @app.on_event("startup")
 def _startup() -> None:
-    existing = {a.get("name") for a in _all_agents()}
-    for name in ["Sage", "Quill", "Dash"]:
-        if name in existing:
-            rec = firebase.db_get(f"agents/{name}")
-            # backfill marketplace metadata + dashboard for agents seeded before the pivot
-            if rec and not rec.get("use_case_type"):
-                patch = {k: v for k, v in dict(REFERENCE_ENRICH).items()}
-                firebase.db_patch(f"agents/{name}", patch)
-                rec = {**rec, **patch}
-            if rec and not rec.get("ui_schema"):
-                _pagegen_hook(rec)
-            _bind(rec)
-            continue
-        try:
-            suite = run_suite(REGISTRY[name], ROOT)                      # instant (scripted)
-            runs = [r.to_dict() for r in suite.runs]
-            rec = _record(name, suite.version, REFERENCE[name], "reference", suite.grade, runs,
-                          TERMS.get("runs_per_test", 3), agent_id=name, enrich=dict(REFERENCE_ENRICH))
-            rec["blurb"] = REFERENCE_BLURB.get(name)
-            firebase.db_put(f"agents/{name}", rec)
-            _pagegen_hook(rec)
-            _bind(rec)
-        except Exception as e:
-            print(f"[seed] {name} failed: {e}")
-    # rebind any maker agents that already exist
-    for a in _all_agents():
-        if a.get("kind") == "llm" and a.get("listed"):
-            try:
-                _bind(a)
-            except Exception:
-                pass
+    ensure_seeded()
+
+
+@app.middleware("http")
+async def _seed_on_first_request(request, call_next):
+    ensure_seeded()
+    return await call_next(request)
 
 
 # ============================ auth ============================
@@ -538,8 +581,7 @@ class MakerIn(BaseModel):
     pitch: str | None = None             # optional one-liner: what does your agent do? (guides enrichment)
 
 
-def _run_maker_job(job_id: str, rec_meta: dict):
-    job = JOBS[job_id]
+def _run_maker_job(job_id: str, job: dict, rec_meta: dict):
     name, version, developer = rec_meta["name"], rec_meta["version"], rec_meta["developer"]
     sp, model = rec_meta["system_prompt"], rec_meta["model"]
     primary_model = model or os.environ.get("NVIDIA_MODEL")
@@ -562,12 +604,16 @@ def _run_maker_job(job_id: str, rec_meta: dict):
         if escalated:
             job["escalations"] += 1
             job["escalated_tests"].append(test_id)
+        if not ON_SERVERLESS:          # live per-test progress for the polled (local) path
+            _job_save(job_id, job)
 
     try:
         job["status"] = "running"
+        _job_save(job_id, job)
         suite = run_suite_escalating(primary, escalation, ROOT, max_workers=8, progress=progress)
         runs_out = [r.to_dict() for r in suite.runs]
         job["stage"] = "enriching"
+        _job_save(job_id, job)
         enrich = enrich_agent(name, sp, pitch=rec_meta.get("pitch", ""), model=primary_model)
         rec = _record(name, version, developer, "llm", suite.grade, runs_out, 1,
                       system_prompt=sp, model=primary_model, owner_uid=rec_meta["owner_uid"], enrich=enrich)
@@ -576,6 +622,7 @@ def _run_maker_job(job_id: str, rec_meta: dict):
         rec["escalated_tests"] = job["escalated_tests"]
         firebase.db_put(f"agents/{rec['id']}", rec)
         job["stage"] = "building-dashboard"
+        _job_save(job_id, job)
         _pagegen_hook(rec)
         if rec["listed"]:
             _bind(rec)
@@ -585,9 +632,11 @@ def _run_maker_job(job_id: str, rec_meta: dict):
                                                "failed_tests", "book_400k_payments", "listed", "model",
                                                "category", "use_case_type", "tagline", "description")},
                          "escalations": job["escalations"], "escalation_model": ESCALATION_MODEL}
+        _job_save(job_id, job)
     except Exception as e:
         job["status"] = "error"
         job["error"] = f"{type(e).__name__}: {e}"
+        _job_save(job_id, job)
 
 
 @app.post("/maker/agents")
@@ -596,19 +645,24 @@ def maker_submit(body: MakerIn, authorization: str = Header(None)):
     if not llm_available():
         raise HTTPException(503, "no LLM keys configured — set NVIDIA_API_KEYS in .env")
     developer = (u["email"].split("@")[0] or "maker").replace(".", " ").title() + " (maker)"
-    job_id = f"job-{next(_job_ids)}"
-    JOBS[job_id] = {"status": "queued", "done": 0, "total": 20, "tests": {}, "agent": body.name,
-                    "model": body.model or os.environ.get("NVIDIA_MODEL"), "owner_uid": u["uid"]}
+    job_id = f"job-{int(time.time() * 1000)}"
+    job = {"status": "queued", "done": 0, "total": 20, "tests": {}, "agent": body.name,
+           "model": body.model or os.environ.get("NVIDIA_MODEL"), "owner_uid": u["uid"]}
+    _job_save(job_id, job)
     meta = {"name": body.name, "version": body.version, "developer": developer,
             "system_prompt": body.system_prompt, "model": body.model, "runs": max(1, min(body.runs, 3)),
             "pitch": body.pitch or "", "owner_uid": u["uid"]}
-    threading.Thread(target=_run_maker_job, args=(job_id, meta), daemon=True).start()
-    return {"job_id": job_id, "status": "queued"}
+    if ON_SERVERLESS:
+        # No surviving background thread on serverless — run inline and persist the result.
+        _run_maker_job(job_id, job, meta)
+    else:
+        threading.Thread(target=_run_maker_job, args=(job_id, job, meta), daemon=True).start()
+    return {"job_id": job_id, "status": job.get("status", "queued")}
 
 
 @app.get("/maker/jobs/{job_id}")
 def maker_job(job_id: str):
-    job = JOBS.get(job_id)
+    job = _job_load(job_id)
     if not job:
         raise HTTPException(404, "unknown job")
     return job

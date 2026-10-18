@@ -32,7 +32,8 @@ def _client():
 
 
 def ask_json(prompt: str) -> dict:
-    model = os.environ["BACKSTOP_LLM_MODEL"]
+    model = (os.environ.get("BACKSTOP_LLM_MODEL") or os.environ.get("NVIDIA_MODEL")
+             or "openai/gpt-oss-20b")
     resp = _client().chat.completions.create(model=model, messages=[{"role": "user", "content": prompt}],
                                              response_format={"type": "json_object"}, temperature=0)
     return json.loads(resp.choices[0].message.content)

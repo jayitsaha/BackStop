@@ -8,6 +8,9 @@ openai>=1.30
 python-dotenv>=1.0
 PyJWT>=2.8
 
+# Multimodal Inbox Guard: read/resize uploaded bill + email screenshots.
+Pillow>=10.0
+
 # Free Bitcoin anchoring for on-chain agent provenance (optional — degrades gracefully if absent)
 opentimestamps-client
 

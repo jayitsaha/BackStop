@@ -1,0 +1,27 @@
+# Keep the deployment upload (and the Python function bundle) small.
+# Local virtualenvs — never ship these; Vercel installs from requirements.txt.
+.venv/
+.venv-guardian/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Web build is produced on Vercel from web/package.json; don't upload local artifacts.
+web/node_modules/
+web/dist/
+
+# Local-only fixtures, generated demo data, docs, tests, helper scripts.
+demo-artifacts/
+demo/results.json
+docs/
+tests/
+conftest.py
+
+# Secrets / local config (also gitignored).
+.env
+.env.*
+client_secret_*.json
+*.apps.googleusercontent.com.json
+
+.git/
+.DS_Store
