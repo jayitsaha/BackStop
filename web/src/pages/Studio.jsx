@@ -5,7 +5,8 @@ import api from '../api'
 import { useAsync } from '../lib/useAsync'
 import { Loading } from '../components/states'
 import { GradeBadge, ArrowIcon, CheckIcon, XIcon, ShieldIcon } from '../components/marks'
-import { cents, usd, oneIn, TEST_TITLES, shortTestId, accentTheme, iconFor, CATEGORY_ICON, CATEGORY_ACCENT } from '../lib/format'
+import { cents, usd, oneIn, TEST_TITLES, shortTestId, accentTheme, CATEGORY_ICON, CATEGORY_ACCENT } from '../lib/format'
+import { iconFor as iconSvg } from '../components/widgets/shared.jsx'
 import { Reveal, Stagger, stagItem, Tactile } from '../components/ui/motion.jsx'
 import { GlowBackdrop, GoldRule } from '../components/ui/Backdrop.jsx'
 
@@ -148,7 +149,7 @@ export default function Studio() {
                   onClick={() => loadIdea(idea)}
                   className="chip hover:border-brand/40 hover:text-white"
                 >
-                  <span className="text-[13px] leading-none">{iconFor(idea.icon)}</span>
+                  {iconSvg(idea.icon || 'sparkle', 'h-3.5 w-3.5')}
                   {idea.name}
                 </Tactile>
               ))}
@@ -293,7 +294,7 @@ function Result({ r }) {
           <div className="flex flex-wrap items-center gap-2">
             {category && (
               <span className={`chip ${a.bg} ${a.text} ${a.ring} ring-1 border-transparent`}>
-                <span className="text-[12px] leading-none">{iconFor(CATEGORY_ICON[category] || 'sparkle')}</span>
+                {iconSvg(CATEGORY_ICON[category] || 'sparkle', 'h-3.5 w-3.5')}
                 {category}
               </span>
             )}
@@ -304,7 +305,7 @@ function Result({ r }) {
           {r.tagline && <p className="mt-3 font-display text-lg font-semibold tracking-tightish text-white">{r.tagline}</p>}
           {r.description && <p className="mt-1.5 text-sm leading-relaxed text-slate-400">{r.description}</p>}
           <p className="mt-3 flex items-center gap-1.5 text-xs text-brand/90">
-            <span>✨</span> A custom dashboard was auto-generated for this agent.
+            {iconSvg('sparkle', 'h-3.5 w-3.5')} A custom dashboard was auto-generated for this agent.
           </p>
         </div>
       )}

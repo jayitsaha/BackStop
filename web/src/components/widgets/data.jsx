@@ -3,6 +3,7 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContai
 import api from '../../api'
 import { useAsync } from '../../lib/useAsync'
 import { useCustomer } from '../../lib/CustomerContext.jsx'
+import { LockIcon } from '../marks'
 import { WidgetShell, accent, resolveSource, fmt, StatusTag, RunTimeline } from './shared.jsx'
 
 /* -------------------------------------------------------------- stat_cards */
@@ -282,7 +283,7 @@ export function MandateEditor({ section }) {
           <div className="space-y-2">
             {frozen.map((f, i) => (
               <div key={i} className="flex items-center justify-between rounded-lg border border-bad/30 bg-bad/5 px-3 py-2 text-sm">
-                <span className="text-slate-200">🔒 {f.payee}{f.reason ? <span className="text-xs text-slate-500"> · {f.reason}</span> : null}</span>
+                <span className="inline-flex items-center gap-1.5 text-slate-200"><LockIcon className="h-3.5 w-3.5 shrink-0 text-bad" /> {f.payee}{f.reason ? <span className="text-xs text-slate-500"> · {f.reason}</span> : null}</span>
                 <button onClick={() => unhold(f.payee)} disabled={busy} className="text-xs text-slate-400 hover:text-white">unfreeze</button>
               </div>
             ))}

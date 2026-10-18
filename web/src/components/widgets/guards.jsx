@@ -763,7 +763,7 @@ export function GmailConnect({ section = {} }) {
                       <span className={`text-xs font-medium ${status.kind === 'bad' ? 'text-bad' : status.kind === 'brand' ? 'text-brand-soft' : 'text-safe'}`}>✓ {status.label}</span>
                     ) : (
                       <>
-                        <ActBtn label="🔒 Hold the payment" danger busy={actBusy[it.id] === 'hold'} onClick={() => doHoldPayment(it)} />
+                        <ActBtn label="Hold the payment" danger busy={actBusy[it.id] === 'hold'} onClick={() => doHoldPayment(it)} />
                         <ActBtn label="Draft safe reply" busy={actBusy[it.id] === 'reply'} onClick={() => doReply(it)} />
                         <ActBtn label="Hand to my agent" busy={actBusy[it.id] === 'agent'} onClick={() => doHandToAgent(it)} />
                         <ActBtn label="Report spam" danger busy={actBusy[it.id] === 'spam'} onClick={() => doReportSpam(it)} />

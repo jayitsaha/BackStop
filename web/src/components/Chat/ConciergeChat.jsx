@@ -20,19 +20,69 @@ function Avatar({ role, initial, t }) {
   )
 }
 
+/* -------------------------------------------------- lightweight markdown */
+// Inline spans: **bold**, __bold__, *italic*, `code`, [text](url).
+function mdInline(text) {
+  const parts = []
+  let rest = String(text)
+  let key = 0
+  const re = /(\*\*([^*]+)\*\*|__([^_]+)__|`([^`]+)`|\*([^*\n]+)\*|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\))/
+  let m
+  while ((m = re.exec(rest))) {
+    if (m.index > 0) parts.push(rest.slice(0, m.index))
+    if (m[2] != null || m[3] != null) parts.push(<b key={key++} className="font-semibold text-white">{m[2] ?? m[3]}</b>)
+    else if (m[4] != null) parts.push(<code key={key++} className="rounded bg-ink-800 px-1 py-0.5 font-mono text-[0.85em] text-brand-soft">{m[4]}</code>)
+    else if (m[5] != null) parts.push(<em key={key++} className="italic text-slate-100">{m[5]}</em>)
+    else parts.push(<a key={key++} href={m[7]} target="_blank" rel="noreferrer" className="font-medium text-brand-soft underline decoration-brand/40 underline-offset-2 hover:text-white">{m[6]}</a>)
+    rest = rest.slice(m.index + m[0].length)
+  }
+  if (rest) parts.push(rest)
+  return parts
+}
+// Block parser: headings, bullet/numbered lists, paragraphs.
+function ChatMarkdown({ text }) {
+  const lines = String(text || '').replace(/\\n/g, '\n').split('\n')
+  const out = []
+  let list = null
+  let ordered = false
+  const flush = () => {
+    if (!list) return
+    const Tag = ordered ? 'ol' : 'ul'
+    out.push(
+      <Tag key={out.length} className={`my-1 ml-4 space-y-0.5 ${ordered ? 'list-decimal' : 'list-disc'} marker:text-slate-500`}>
+        {list.map((li, i) => <li key={i} className="pl-0.5">{mdInline(li)}</li>)}
+      </Tag>,
+    )
+    list = null
+  }
+  for (const raw of lines) {
+    const line = raw.replace(/\s+$/, '')
+    if (/^#{1,6}\s+/.test(line)) { flush(); out.push(<div key={out.length} className="mt-2 font-display text-[15px] font-semibold tracking-tightish text-white">{mdInline(line.replace(/^#{1,6}\s+/, ''))}</div>); continue }
+    const ol = line.match(/^\s*\d+[.)]\s+(.*)/)
+    const ul = line.match(/^\s*[-*•]\s+(.*)/)
+    if (ol) { if (!list || !ordered) { flush(); list = []; ordered = true } list.push(ol[1]); continue }
+    if (ul) { if (!list || ordered) { flush(); list = []; ordered = false } list.push(ul[1]); continue }
+    if (!line.trim()) { flush(); continue }
+    flush()
+    out.push(<p key={out.length}>{mdInline(line)}</p>)
+  }
+  flush()
+  return <div className="space-y-2">{out}</div>
+}
+
 function Bubble({ msg, initial, t }) {
   const isUser = msg.role === 'user'
   return (
     <div className={`flex items-start gap-2.5 ${isUser ? 'flex-row-reverse' : ''}`}>
       <Avatar role={msg.role} initial={initial} t={t} />
       <div
-        className={`max-w-[78%] whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+        className={`max-w-[78%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
           isUser
-            ? 'rounded-tr-sm bg-brand/15 text-slate-100 ring-1 ring-brand/25'
+            ? 'whitespace-pre-wrap rounded-tr-sm bg-brand/15 text-slate-100 ring-1 ring-brand/25'
             : 'rounded-tl-sm border border-line bg-ink-900/70 text-slate-200'
         }`}
       >
-        {msg.content}
+        {isUser ? msg.content : <ChatMarkdown text={msg.content} />}
       </div>
     </div>
   )
@@ -164,7 +214,7 @@ export default function ConciergeChat({ schema, agents = [], activeAgentId, agen
     }
   }
 
-  const launcherIcon = iconFor(schema?.icon, 'h-7 w-7')
+  const launcherIcon = iconFor(schema?.icon, 'h-7 w-7 block')
 
   // Portal to <body> so the fixed launcher/panel escapes the <main> ancestor, which has a persistent
   // `fade-up` transform (fill-mode both) that would otherwise become the containing block for `fixed`
@@ -189,7 +239,7 @@ export default function ConciergeChat({ schema, agents = [], activeAgentId, agen
             {/* mocha gradient face + specular sweep */}
             <span className="absolute inset-0 rounded-full bg-mocha-sheen" aria-hidden />
             <span className="absolute inset-0 overflow-hidden rounded-full glass-sweep" aria-hidden />
-            <span className="relative drop-shadow-sm transition-transform duration-300 group-hover:rotate-[6deg]">{launcherIcon}</span>
+            <span className="relative -translate-y-[3px] drop-shadow-sm transition-transform duration-300 group-hover:rotate-[6deg]">{launcherIcon}</span>
           </button>
         </div>
       )}

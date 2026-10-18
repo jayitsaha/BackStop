@@ -55,6 +55,24 @@ export function iconFor(name, className = 'h-5 w-5') {
     // four-point sparkle with a secondary glint
     case 'sparkle':
       return <Ic className={className} d={<><path d="M12 3.4c.42 3.7 1.9 5.18 5.6 5.6-3.7.42-5.18 1.9-5.6 5.6-.42-3.7-1.9-5.18-5.6-5.6 3.7-.42 5.18-1.9 5.6-5.6z" {...S} /><path d="M18.2 14.4c.2 1.65.92 2.37 2.57 2.57-1.65.2-2.37.92-2.57 2.57-.2-1.65-.92-2.37-2.57-2.57 1.65-.2 2.37-.92 2.57-2.57z" {...S2} /></>} />
+    // document with a folded corner + lines (submit / list)
+    case 'doc':
+      return <Ic className={className} d={<><path d="M6.5 3.6h6.9L18.5 8.7V19a1.5 1.5 0 01-1.5 1.5H6.5A1.5 1.5 0 015 19V5.1A1.5 1.5 0 016.5 3.6z" {...S} /><path d="M13 3.8v5h5" {...S} /><path d="M8 12.5h6M8 15.5h4" {...S2} /></>} />
+    // laboratory flask (crash-test rig)
+    case 'beaker':
+      return <Ic className={className} d={<><path d="M9.6 3.8h4.8M10.6 3.8v5.1L5.9 16.9A1.6 1.6 0 007.3 19.4h9.4a1.6 1.6 0 001.4-2.5l-4.7-8V3.8" {...S} /><path d="M8.1 13.6h7.8" {...S2} /></>} />
+    // coin with a currency stroke (price)
+    case 'coin':
+      return <Ic className={className} d={<><circle cx="12" cy="12" r="8.1" {...S} /><path d="M12 7v10M14.4 9.1c-.45-.9-1.35-1.4-2.4-1.4-1.3 0-2.35.82-2.35 1.95 0 2.5 4.85 1.45 4.85 3.95 0 1.13-1.05 1.95-2.35 1.95-1.1 0-2.05-.5-2.45-1.45" {...S} /></>} />
+    // single person (chooses / connects)
+    case 'user':
+      return <Ic className={className} d={<><circle cx="12" cy="8.1" r="3.4" {...S} /><path d="M5.6 19.4a6.4 6.4 0 0112.8 0" {...S} /></>} />
+    // receipt with a torn edge (claim)
+    case 'receipt':
+      return <Ic className={className} d={<><path d="M6.2 3.8h11.6v16.4l-1.95-1.25-1.95 1.25-1.9-1.25-1.95 1.25-1.95-1.25L6.2 20.2V3.8z" {...S} /><path d="M9 8h6M9 11h6M9 14h3.5" {...S2} /></>} />
+    // circular retry arrows (re-test)
+    case 'refresh':
+      return <Ic className={className} d={<><path d="M4.8 12a7.2 7.2 0 0112.3-5.1M19.2 12a7.2 7.2 0 01-12.3 5.1" {...S} /><path d="M17.3 3.6v3.3H14M6.7 20.4v-3.3H10" {...S} /></>} />
     case 'shield':
     default:
       return <ShieldIcon className={className} />

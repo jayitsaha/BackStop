@@ -1,19 +1,20 @@
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ShieldIcon, CheckIcon, LockIcon, ArrowIcon } from '../components/marks'
+import { iconFor as iconSvg } from '../components/widgets/shared.jsx'
 import { Reveal, Stagger, stagItem, Tactile } from '../components/ui/motion.jsx'
 import { GlowBackdrop, GoldRule } from '../components/ui/Backdrop.jsx'
 
 const STAGES = [
-  { n: 1, t: 'List', who: 'Agent maker', d: 'Submits an agent — name, version, developer email, document.', icon: '📤' },
+  { n: 1, t: 'List', who: 'Agent maker', d: 'Submits an agent — name, version, developer email, document.', icon: iconSvg('doc', 'h-5 w-5') },
   { n: 2, t: 'Verify (KYA)', who: 'Backstop', d: 'Checks the developer, signs an agent ID bound to the exact code hash.', icon: <ShieldIcon className="h-5 w-5" /> },
-  { n: 3, t: 'Crash-test', who: 'The rig', d: '20 attacks × 3 runs in a fresh sandbox. Every tool call recorded.', icon: '🧪' },
+  { n: 3, t: 'Crash-test', who: 'The rig', d: '20 attacks × 3 runs in a fresh sandbox. Every tool call recorded.', icon: iconSvg('beaker', 'h-5 w-5') },
   { n: 4, t: 'Grade', who: 'Scorer', d: 'Deterministic checks on the action log give a grade and a stability band.', icon: <CheckIcon className="h-5 w-5" /> },
-  { n: 5, t: 'Price', who: 'Pricing engine', d: 'Grade → frequency → premium. A is 2¢/payment; F is declined.', icon: '💸' },
+  { n: 5, t: 'Price', who: 'Pricing engine', d: 'Grade → frequency → premium. A is 2¢/payment; F is declined.', icon: iconSvg('coin', 'h-5 w-5') },
   { n: 6, t: 'Cover', who: 'Policy ledger', d: 'One master policy per agent; premium accrues per payment; reinsurer takes most.', icon: <LockIcon className="h-5 w-5" /> },
-  { n: 7, t: 'Choose', who: 'Maya', d: 'Connects her bank, sets a mandate, adds the agent. Certificate issued.', icon: '🙋‍♀️' },
-  { n: 8, t: 'Claim', who: 'Claims engine', d: 'A mistake inside the mandate is read from the log and paid — $140 in a day.', icon: '🧾' },
-  { n: 9, t: 'Re-test', who: 'The rig', d: 'The incident becomes test 21. Every insured agent is re-run; prices update.', icon: '🔁' },
+  { n: 7, t: 'Choose', who: 'Maya', d: 'Connects her bank, sets a mandate, adds the agent. Certificate issued.', icon: iconSvg('user', 'h-5 w-5') },
+  { n: 8, t: 'Claim', who: 'Claims engine', d: 'A mistake inside the mandate is read from the log and paid — $140 in a day.', icon: iconSvg('receipt', 'h-5 w-5') },
+  { n: 9, t: 'Re-test', who: 'The rig', d: 'The incident becomes test 21. Every insured agent is re-run; prices update.', icon: iconSvg('refresh', 'h-5 w-5') },
 ]
 
 export default function Loop() {

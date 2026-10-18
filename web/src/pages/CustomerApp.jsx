@@ -168,9 +168,15 @@ function ChatDashboard({ agents }) {
           <AddAgentModal
             owned={agents}
             onClose={() => setAdding(false)}
-            onAdded={(id) => {
+            onAdded={async (id) => {
               setAdding(false)
-              if (id) pickAgent(id)
+              // re-fetch the customer so the new agent shows up in the rail immediately…
+              await ctx.refresh()
+              // …then switch to it
+              if (id) {
+                setActiveAgentId(id)
+                api.setActive(id).catch(() => {})
+              }
             }}
           />
         )}
@@ -365,7 +371,7 @@ function SlimHeader({ c, agentName, schema, onReset }) {
             </span>
             {c.frozen?.length > 0 && (
               <span className="chip border-bad/30 bg-bad/10 text-bad" title={c.frozen.map((f) => f.payee).join(', ')}>
-                🔒 {c.frozen.length} frozen
+                <LockIcon className="h-3.5 w-3.5" /> {c.frozen.length} frozen
               </span>
             )}
           </div>
