@@ -20,31 +20,41 @@ function Ic({ d, className = 'h-4 w-4' }) {
     </svg>
   )
 }
-const S = { stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round' }
+// Refined 24px line set — 1.5 stroke, rounded, with a low-opacity secondary pass
+// for depth. Original Backstop marks; deliberately crisp over cutesy.
+const S = { stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round' }
+const S2 = { ...S, strokeWidth: 1.3, opacity: 0.55 }
+const DOT = { fill: 'currentColor', stroke: 'none' }
 export function iconFor(name, className = 'h-5 w-5') {
   switch (name) {
+    // admission ticket — pinched waist + perforated stub
     case 'ticket':
-      return <Ic className={className} d={<><path d="M4 8a2 2 0 012-2h12a2 2 0 012 2 2 2 0 000 4 2 2 0 01-2 2H6a2 2 0 01-2-2 2 2 0 000-4z" {...S} /><path d="M13 6v12" strokeDasharray="2 2" {...S} /></>} />
+      return <Ic className={className} d={<><path d="M4 9.1V7.8A1.3 1.3 0 015.3 6.5h13.4A1.3 1.3 0 0120 7.8v1.3a1.9 1.9 0 000 3.8v1.3a1.3 1.3 0 01-1.3 1.3H5.3A1.3 1.3 0 014 14.2v-1.3a1.9 1.9 0 000-3.8z" {...S} /><path d="M14.6 6.8v10.4" strokeDasharray="1.4 2" {...S} /></>} />
+    // robot head — antenna, rounded crown, filled eyes, side ears
     case 'bot':
-      return <Ic className={className} d={<><rect x="5" y="8" width="14" height="10" rx="2" {...S} /><path d="M12 8V5M8 13h.01M16 13h.01" {...S} /></>} />
+      return <Ic className={className} d={<><rect x="4.6" y="8" width="14.8" height="10" rx="3.2" {...S} /><path d="M12 8V5.4" {...S} /><circle cx="12" cy="4.4" r="1.1" {...S} /><circle cx="9.6" cy="13" r="1.05" {...DOT} /><circle cx="14.4" cy="13" r="1.05" {...DOT} /><path d="M3 12v1.8M21 12v1.8" {...S} /></>} />
+    // top-down jet — elegant swept silhouette
     case 'plane':
-      return <Ic className={className} d={<path d="M4 13l16-6-4 14-3-6-6-2z" {...S} />} />
+      return <Ic className={className} d={<path d="M12 3c.86 0 1.5 1.3 1.5 2.9v2.3l6.4 3.8v1.8l-6.4-1.9v3.8l1.8 1.3v1.5L12 20.5l-3.3-1.1v-1.5l1.8-1.3v-3.8L4 14.8V13l6.5-3.8V5.9C10.5 4.3 11.14 3 12 3z" {...S} />} />
     case 'cart':
-      return <Ic className={className} d={<><path d="M4 5h2l2 11h9l2-8H7" {...S} /><circle cx="10" cy="19" r="1.3" {...S} /><circle cx="17" cy="19" r="1.3" {...S} /></>} />
+      return <Ic className={className} d={<><path d="M3 4.5h2.1l1.8 10.1a1.5 1.5 0 001.48 1.24h7.5a1.5 1.5 0 001.47-1.2L19 7.2H6.1" {...S} /><circle cx="9.5" cy="19.2" r="1.35" {...S} /><circle cx="16.3" cy="19.2" r="1.35" {...S} /></>} />
+    // trading candlesticks on an axis
     case 'chart':
-      return <Ic className={className} d={<path d="M5 19V5M5 19h14M8 16l3-4 3 2 4-6" {...S} />} />
+      return <Ic className={className} d={<><path d="M4 4v15.5h15.5" {...S} /><path d="M8 8.3v6.8M13 6.4v9.2M18 9v5.4" {...S} /><rect x="6.7" y="9.9" width="2.6" height="3.4" rx="0.5" {...S} /><rect x="11.7" y="8.2" width="2.6" height="4.6" rx="0.5" {...S} /><rect x="16.7" y="10.3" width="2.6" height="2.7" rx="0.5" {...S} /></>} />
+    // research — magnifier scanning document lines
     case 'search':
-      return <Ic className={className} d={<><circle cx="11" cy="11" r="6" {...S} /><path d="M20 20l-4-4" {...S} /></>} />
+      return <Ic className={className} d={<><circle cx="10.5" cy="10.5" r="6" {...S} /><path d="M19.6 19.6l-4.4-4.4" {...S} /><path d="M8.3 9.4h4.4M8.3 12h2.9" {...S2} /></>} />
     case 'calendar':
-      return <Ic className={className} d={<><rect x="4" y="6" width="16" height="14" rx="2" {...S} /><path d="M4 10h16M8 4v4M16 4v4" {...S} /></>} />
+      return <Ic className={className} d={<><rect x="3.6" y="5.6" width="16.8" height="14.8" rx="2.6" {...S} /><path d="M3.6 10h16.8" {...S} /><path d="M8 3.6v4M16 3.6v4" {...S} /><path d="M7.4 14h2.4M11.8 14h2.4M7.4 16.9h2.4" {...S2} /></>} />
     case 'phone':
-      return <Ic className={className} d={<path d="M5 4h4l2 5-2 1a12 12 0 005 5l1-2 5 2v4a1 1 0 01-1 1A16 16 0 014 5a1 1 0 011-1z" {...S} />} />
+      return <Ic className={className} d={<path d="M6.4 3.6h2.9l1.5 4.1-2 1.3a11 11 0 005 5l1.3-2 4.1 1.5v2.9a1.6 1.6 0 01-1.72 1.6A16.5 16.5 0 014.8 5.3 1.6 1.6 0 016.4 3.6z" {...S} />} />
     case 'mail':
-      return <Ic className={className} d={<><rect x="4" y="6" width="16" height="12" rx="2" {...S} /><path d="M4 8l8 5 8-5" {...S} /></>} />
+      return <Ic className={className} d={<><rect x="3.5" y="5.6" width="17" height="12.8" rx="2.6" {...S} /><path d="M4.4 8.2l6.5 4.3a2 2 0 002.2 0l6.5-4.3" {...S} /></>} />
     case 'bank':
-      return <Ic className={className} d={<path d="M4 10l8-5 8 5M6 10v7M10 10v7M14 10v7M18 10v7M4 20h16" {...S} />} />
+      return <Ic className={className} d={<><path d="M12 3.6 3.6 8h16.8L12 3.6z" {...S} /><path d="M5.6 11v5.6M9.5 11v5.6M14.5 11v5.6M18.4 11v5.6" {...S} /><path d="M3.6 20.2h16.8" {...S} /><circle cx="12" cy="6.1" r="0.9" {...DOT} /></>} />
+    // four-point sparkle with a secondary glint
     case 'sparkle':
-      return <Ic className={className} d={<path d="M12 4l1.8 4.2L18 10l-4.2 1.8L12 16l-1.8-4.2L6 10l4.2-1.8L12 4z" {...S} />} />
+      return <Ic className={className} d={<><path d="M12 3.4c.42 3.7 1.9 5.18 5.6 5.6-3.7.42-5.18 1.9-5.6 5.6-.42-3.7-1.9-5.18-5.6-5.6 3.7-.42 5.18-1.9 5.6-5.6z" {...S} /><path d="M18.2 14.4c.2 1.65.92 2.37 2.57 2.57-1.65.2-2.37.92-2.57 2.57-.2-1.65-.92-2.37-2.57-2.57 1.65-.2 2.37-.92 2.57-2.57z" {...S2} /></>} />
     case 'shield':
     default:
       return <ShieldIcon className={className} />

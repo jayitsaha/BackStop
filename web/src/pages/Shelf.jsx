@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import api from '../api'
 import { useAsync } from '../lib/useAsync'
 import { Loading, ErrorNote } from '../components/states'
 import { VerifiedMark, GradePill, ProtectedMark, ArrowIcon, ShieldIcon, LockIcon, CheckIcon } from '../components/marks'
-import { AGENT_BLURB, cents, oneIn, gradeTheme, accentTheme, iconFor, CATEGORY_ICON } from '../lib/format'
+import { AGENT_BLURB, cents, oneIn, gradeTheme, accentTheme, CATEGORY_ICON } from '../lib/format'
 import { accent as accentOf, iconFor as iconSvg } from '../components/widgets/shared.jsx'
+import { rankAgents, reasonText } from '../lib/agentSearch'
 import { Reveal, Stagger, stagItem, Tactile, EASE } from '../components/ui/motion.jsx'
 import DotField from '../components/ui/DotField.jsx'
 import AgentGlobe from '../components/ui/AgentGlobe.jsx'
@@ -47,6 +48,7 @@ function coverPalette(hex) {
 export default function Shelf() {
   const { data, loading, error } = useAsync(() => api.listings(), [])
   const [active, setActive] = useState('All')
+  const [q, setQ] = useState('')
 
   const sorted = useMemo(() => {
     if (!data) return []
@@ -62,6 +64,11 @@ export default function Shelf() {
     return seen
   }, [sorted])
 
+  const query = q.trim()
+  const searching = query.length > 0
+  // instant, intent-aware ranking — recomputed only when the query or shelf changes
+  const ranked = useMemo(() => (searching ? rankAgents(sorted, query) : null), [searching, query, sorted])
+
   if (loading) return <Loading label="Opening the marketplace…" />
   if (error) return <ErrorNote error={error} />
 
@@ -74,49 +81,61 @@ export default function Shelf() {
 
   return (
     <div className="space-y-24">
-      <Hero stats={{ agents: data.length, live, best, minPrem, cats: categories.length }} />
+      <Hero
+        stats={{ agents: data.length, live, best, minPrem, cats: categories.length }}
+        q={q}
+        setQ={setQ}
+        listings={sorted}
+        resultCount={ranked?.length ?? 0}
+      />
 
-      <FeaturedCarousel listings={sorted} />
+      {searching ? (
+        <SearchResults query={query} ranked={ranked} onClear={() => setQ('')} />
+      ) : (
+        <>
+          <FeaturedCarousel listings={sorted} />
 
-      <TrustMarquee categories={categories} />
+          <TrustMarquee categories={categories} />
 
-      <section>
-        <Reveal className="mb-6 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <div className="eyebrow mb-3"><Tick /> On the shelf</div>
-            <h2 className="font-display text-4xl font-semibold tracking-tighter2 text-white md:text-5xl">
-              Verified agents,<br className="hidden sm:block" /> graded &amp; priced.
-            </h2>
-          </div>
-          <Link to="/pricing" className="hidden items-center gap-1.5 text-sm text-brand-soft hover:text-white sm:inline-flex">
-            How the grade sets the price <ArrowIcon className="h-4 w-4" />
-          </Link>
-        </Reveal>
+          <section>
+            <Reveal className="mb-6 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <div className="eyebrow mb-3"><Tick /> On the shelf</div>
+                <h2 className="font-display text-4xl font-semibold tracking-tighter2 text-white md:text-5xl">
+                  Verified agents,<br className="hidden sm:block" /> graded &amp; priced.
+                </h2>
+              </div>
+              <Link to="/pricing" className="hidden items-center gap-1.5 text-sm text-brand-soft hover:text-white sm:inline-flex">
+                How the grade sets the price <ArrowIcon className="h-4 w-4" />
+              </Link>
+            </Reveal>
 
-        {/* category filter */}
-        <Reveal delay={0.08} className="mb-8 flex flex-wrap gap-2">
-          <FilterChip label="All" count={sorted.length} active={active === 'All'} onClick={() => setActive('All')} />
-          {categories.map((c) => (
-            <FilterChip
-              key={c}
-              label={c}
-              icon={iconFor(CATEGORY_ICON[c] || 'sparkle')}
-              count={sorted.filter((l) => (l.category || 'Other') === c).length}
-              active={active === c}
-              accent={accentTheme((sorted.find((l) => (l.category || 'Other') === c) || {}).accent)}
-              onClick={() => setActive(c)}
-            />
-          ))}
-        </Reveal>
+            {/* category filter */}
+            <Reveal delay={0.08} className="mb-8 flex flex-wrap gap-2">
+              <FilterChip label="All" count={sorted.length} active={active === 'All'} onClick={() => setActive('All')} />
+              {categories.map((c) => (
+                <FilterChip
+                  key={c}
+                  label={c}
+                  icon={iconSvg(CATEGORY_ICON[c] || 'sparkle', 'h-3.5 w-3.5')}
+                  count={sorted.filter((l) => (l.category || 'Other') === c).length}
+                  active={active === c}
+                  accent={accentTheme((sorted.find((l) => (l.category || 'Other') === c) || {}).accent)}
+                  onClick={() => setActive(c)}
+                />
+              ))}
+            </Reveal>
 
-        <Stagger key={active} className="grid gap-6 md:grid-cols-2 lg:grid-cols-3" gap={0.07}>
-          {shown.map((l, i) => (
-            <motion.div key={l.agent} variants={stagItem}>
-              <CoverCard l={l} index={i} />
-            </motion.div>
-          ))}
-        </Stagger>
-      </section>
+            <Stagger key={active} className="grid gap-6 md:grid-cols-2 lg:grid-cols-3" gap={0.07}>
+              {shown.map((l, i) => (
+                <motion.div key={l.agent} variants={stagItem}>
+                  <CoverCard l={l} index={i} />
+                </motion.div>
+              ))}
+            </Stagger>
+          </section>
+        </>
+      )}
 
       <HowRow />
       <ClosingBand />
@@ -146,7 +165,7 @@ function FilterChip({ label, icon, count, active, accent, onClick }) {
 }
 
 /* ------------------------------------------------------------------- hero */
-function Hero({ stats }) {
+function Hero({ stats, q, setQ, listings, resultCount }) {
   return (
     <section className="relative -mx-5 overflow-hidden px-5 pb-10 pt-6 md:pb-16">
       {/* warm ambient backdrop: dots + mocha glow + vignette */}
@@ -188,11 +207,15 @@ function Hero({ stats }) {
           the price. If an insured agent errs inside your rules, we pay the claim.
         </Reveal>
 
-        <Reveal delay={0.2} className="mt-10 flex flex-wrap items-center justify-center gap-3">
-          <Tactile as={Link} to="/studio" className="btn-primary px-5 py-3 text-[15px]">
-            Build &amp; crash-test an agent <ArrowIcon className="h-4 w-4" />
-          </Tactile>
-          <Tactile as={Link} to="/app" className="btn-ghost px-5 py-3 text-[15px]">Hire a verified agent</Tactile>
+        {/* ===== AI search — the primary way to find an agent ===== */}
+        <Reveal delay={0.2} className="mx-auto mt-10 max-w-2xl">
+          <MarketSearch q={q} setQ={setQ} listings={listings} resultCount={resultCount} />
+        </Reveal>
+
+        <Reveal delay={0.26} className="mt-4 flex items-center justify-center gap-4 text-sm text-slate-500">
+          <Link to="/studio" className="inline-flex items-center gap-1.5 text-brand-soft transition hover:text-white">
+            or build &amp; crash-test your own <ArrowIcon className="h-3.5 w-3.5" />
+          </Link>
         </Reveal>
 
         <span className="handwriting mt-5 block text-base text-brand-soft/80">no cover, no shelf.</span>
@@ -230,6 +253,241 @@ function Stat({ big, label, accent }) {
 
 function Mark({ icon, t }) {
   return <span className="inline-flex items-center gap-2">{icon} {t}</span>
+}
+
+/* ===================================================== AI marketplace search */
+function SearchGlyph({ className = 'h-4 w-4' }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
+      <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M20 20l-3.4-3.4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+}
+function SparkGlyph({ className = 'h-4 w-4' }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
+      <path d="M12 3l1.6 5.1L19 10l-5.4 1.9L12 17l-1.6-5.1L5 10l5.4-1.9L12 3z" fill="currentColor" />
+      <path d="M19 15l.7 2.1L22 18l-2.3.9L19 21l-.7-2.1L16 18l2.3-.9L19 15z" fill="currentColor" opacity="0.7" />
+    </svg>
+  )
+}
+
+// example prompts that cycle through the placeholder — teaching users it's semantic
+const EXAMPLE_QUERIES = [
+  'protect me from refund scams',
+  'book a cheap flight somewhere warm',
+  'rebalance my portfolio within risk limits',
+  'stop bots scraping my site',
+  'buy concert tickets without getting scammed',
+  'cite real sources for my research',
+]
+// one-tap intents → seed the query
+const INTENTS = [
+  { label: 'Stop fraud', q: 'stop payment fraud and scams' },
+  { label: 'Fight bots', q: 'block bots and scrapers' },
+  { label: 'Book travel', q: 'book a safe trip within budget' },
+  { label: 'Trade', q: 'rebalance my portfolio' },
+  { label: 'Research', q: 'research with cited sources' },
+  { label: 'Buy tickets', q: 'buy event tickets safely' },
+]
+
+function MarketSearch({ q, setQ, listings, resultCount }) {
+  const nav = useNavigate()
+  const inputRef = useRef(null)
+  const boxRef = useRef(null)
+  const [focused, setFocused] = useState(false)
+  const [hi, setHi] = useState(-1)
+  const [ph, setPh] = useState(0)
+
+  const suggestions = useMemo(() => (q.trim() ? rankAgents(listings, q).slice(0, 5) : []), [q, listings])
+
+  // rotate the placeholder while the box is empty & unfocused
+  useEffect(() => {
+    if (q || focused) return
+    const t = setInterval(() => setPh((p) => (p + 1) % EXAMPLE_QUERIES.length), 2800)
+    return () => clearInterval(t)
+  }, [q, focused])
+
+  // "/" focuses the bar from anywhere (unless already typing somewhere)
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== '/' || e.metaKey || e.ctrlKey) return
+      const tag = (e.target.tagName || '').toLowerCase()
+      if (tag === 'input' || tag === 'textarea' || e.target.isContentEditable) return
+      e.preventDefault()
+      inputRef.current?.focus()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  // click-outside closes the suggestion panel
+  useEffect(() => {
+    const onDown = (e) => { if (boxRef.current && !boxRef.current.contains(e.target)) setFocused(false) }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [])
+
+  useEffect(() => { setHi(-1) }, [q])
+
+  const openAgent = (l) => { if (l) nav(`/agent/${l.agent}`) }
+
+  const onKeyDown = (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setHi((h) => Math.min(h + 1, suggestions.length - 1)) }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setHi((h) => Math.max(h - 1, -1)) }
+    else if (e.key === 'Enter') {
+      if (hi >= 0 && suggestions[hi]) { e.preventDefault(); openAgent(suggestions[hi].l); setFocused(false) }
+      else inputRef.current?.blur()
+    } else if (e.key === 'Escape') {
+      if (q) { setQ('') } else inputRef.current?.blur()
+      setFocused(false)
+    }
+  }
+
+  const showPanel = focused && q.trim().length > 0
+  const empty = q.trim().length > 0 && suggestions.length === 0
+
+  return (
+    <div ref={boxRef} className="relative">
+      {/* the bar */}
+      <div
+        className={`group relative flex items-center gap-3 rounded-full border bg-ink-900/70 px-4 py-3 text-left backdrop-blur-xl transition-all duration-300 sm:px-5 sm:py-3.5 ${
+          focused ? 'border-brand/60 shadow-glow' : 'border-line shadow-panel hover:border-brand/35'
+        }`}
+      >
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-brand/12 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-brand-soft ring-1 ring-brand/25">
+          <motion.span animate={{ rotate: focused ? [0, 15, -10, 0] : 0, scale: focused ? [1, 1.15, 1] : 1 }} transition={{ duration: 0.6 }}>
+            <SparkGlyph className="h-3.5 w-3.5" />
+          </motion.span>
+          AI
+        </span>
+        <SearchGlyph className="h-5 w-5 shrink-0 text-slate-500" />
+        <input
+          ref={inputRef}
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onKeyDown={onKeyDown}
+          placeholder={`Describe what you need — ${EXAMPLE_QUERIES[ph]}`}
+          aria-label="Search agents by description, name, or utility"
+          className="min-w-0 flex-1 bg-transparent text-[15px] text-white outline-none placeholder:text-slate-500"
+          autoComplete="off"
+          spellCheck="false"
+        />
+        {q ? (
+          <button
+            type="button"
+            onClick={() => { setQ(''); inputRef.current?.focus() }}
+            aria-label="Clear search"
+            className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-line text-slate-400 transition hover:border-brand/50 hover:text-white"
+          >
+            <span className="text-sm leading-none">×</span>
+          </button>
+        ) : (
+          <kbd className="hidden shrink-0 rounded border border-line bg-ink-800/80 px-1.5 py-0.5 font-mono text-[10px] text-slate-500 sm:block">/</kbd>
+        )}
+      </div>
+
+      {/* instant suggestion panel */}
+      <AnimatePresence>
+        {showPanel && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.18, ease: EASE }}
+            className="absolute left-0 right-0 top-full z-40 mt-2 overflow-hidden rounded-3xl border border-line bg-ink-850/95 p-2 text-left shadow-float backdrop-blur-xl"
+          >
+            {empty ? (
+              <div className="px-4 py-6 text-center">
+                <div className="font-display text-lg text-white">No agent matches “{q.trim()}”.</div>
+                <p className="mt-1 text-sm text-slate-500">Try a capability — “stop scams”, “book travel”, “buy tickets”.</p>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between px-3 pb-2 pt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-slate-500">
+                  <span>{resultCount} {resultCount === 1 ? 'match' : 'matches'}</span>
+                  <span className="hidden sm:inline">↑↓ to move · ⏎ to open</span>
+                </div>
+                {suggestions.map((r, i) => {
+                  const l = r.l
+                  const t = gradeTheme(l.grade.grade)
+                  const hex = accentOf(l.accent).stroke
+                  return (
+                    <button
+                      key={l.agent}
+                      type="button"
+                      onMouseEnter={() => setHi(i)}
+                      onClick={() => { openAgent(l); setFocused(false) }}
+                      className={`flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors ${hi === i ? 'bg-brand/12' : 'hover:bg-ink-800/70'}`}
+                    >
+                      <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full font-display text-sm font-semibold ring-1 ${t.bg} ${t.text} ${t.ring}`}>
+                        {l.grade.grade}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-2">
+                          <span className="font-sans text-[15px] font-semibold text-white">{l.name}<span style={{ color: hex }}>.</span></span>
+                          <span className="truncate font-mono text-[10px] uppercase tracking-[0.16em] text-slate-500">{l.category || 'Other'}</span>
+                        </span>
+                        <span className="mt-0.5 block truncate text-[13px] text-slate-400">{l.tagline || 'A verified, insured agent.'}</span>
+                      </span>
+                      <span className="hidden shrink-0 font-mono text-[10px] uppercase tracking-[0.14em] text-brand-soft/70 sm:block">{reasonText(r.reasons)}</span>
+                    </button>
+                  )
+                })}
+              </>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* one-tap intents */}
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+        {INTENTS.map((it) => (
+          <Tactile
+            key={it.label}
+            type="button"
+            onClick={() => { setQ(it.q); inputRef.current?.focus() }}
+            className="chip hover:border-brand/40 hover:text-white"
+          >
+            {it.label}
+          </Tactile>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/* --------------------------------------------------------- search results */
+function SearchResults({ query, ranked, onClear }) {
+  const n = ranked.length
+  return (
+    <section>
+      <Reveal className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <div className="eyebrow mb-3"><Tick /> AI search · {n} {n === 1 ? 'result' : 'results'}</div>
+          <h2 className="font-display text-4xl font-semibold tracking-tighter2 text-white md:text-5xl">
+            {n ? <>Agents for <span className="text-gold">“{query}”</span></> : <>Nothing matched <span className="text-gold">“{query}”</span></>}
+          </h2>
+          {!n && <p className="mt-3 max-w-lg text-slate-400">Describe a capability instead — try “protect me from scams”, “book travel”, or “buy concert tickets”.</p>}
+        </div>
+        <button type="button" onClick={onClear} className="inline-flex shrink-0 items-center gap-1.5 self-start text-sm text-brand-soft transition hover:text-white sm:self-auto">
+          Clear search &amp; browse all <ArrowIcon className="h-4 w-4" />
+        </button>
+      </Reveal>
+
+      {n > 0 && (
+        <Stagger key={query} className="grid gap-6 md:grid-cols-2 lg:grid-cols-3" gap={0.06}>
+          {ranked.map((r, i) => (
+            <motion.div key={r.l.agent} variants={stagItem}>
+              <CoverCard l={r.l} index={i} reason={reasonText(r.reasons)} />
+            </motion.div>
+          ))}
+        </Stagger>
+      )}
+    </section>
+  )
 }
 
 /* ----------------------------------------------------- featured carousel */
@@ -412,11 +670,11 @@ function RoundBtn({ onClick, flip, label }) {
 // A seamless marquee of the live categories + trust words — the "as featured in" rhythm.
 function TrustMarquee({ categories }) {
   const words = [
-    ...categories.map((c) => ({ label: c, icon: iconFor(CATEGORY_ICON[c] || 'sparkle') })),
-    { label: 'Identity-verified' },
-    { label: 'Crash-tested' },
-    { label: 'Insured' },
-    { label: 'Auto-paid claims' },
+    ...categories.map((c) => ({ label: c, icon: iconSvg(CATEGORY_ICON[c] || 'sparkle', 'h-4 w-4') })),
+    { label: 'Identity-verified', icon: <ShieldIcon className="h-4 w-4" /> },
+    { label: 'Crash-tested', icon: <CheckIcon className="h-4 w-4" /> },
+    { label: 'Insured', icon: <LockIcon className="h-4 w-4" /> },
+    { label: 'Auto-paid claims', icon: iconSvg('bank', 'h-4 w-4') },
   ]
   const run = [...words, ...words]
   return (
@@ -426,7 +684,7 @@ function TrustMarquee({ categories }) {
       <div className="flex w-max animate-marquee items-center gap-4 whitespace-nowrap">
         {run.map((w, i) => (
           <span key={i} className="inline-flex items-center gap-2 text-sm font-medium text-slate-400">
-            {w.icon && <span className="text-[14px] leading-none">{w.icon}</span>}
+            {w.icon && <span className="text-brand-soft/75">{w.icon}</span>}
             {w.label}
             <span className="mx-2 inline-block h-1 w-1 rounded-full bg-brand/50" />
           </span>
@@ -438,17 +696,16 @@ function TrustMarquee({ categories }) {
 
 function CategoryPill({ category, accent }) {
   const a = accentTheme(accent)
-  const icon = iconFor(CATEGORY_ICON[category] || 'sparkle')
   return (
     <span className={`chip ${a.bg} ${a.text} ${a.ring} ring-1 border-transparent`}>
-      <span className="text-[12px] leading-none">{icon}</span>
+      {iconSvg(CATEGORY_ICON[category] || 'sparkle', 'h-3.5 w-3.5')}
       {category || 'Other'}
     </span>
   )
 }
 
 /* ------------------------------------------------------------ cover cards */
-function CoverCard({ l, index = 0 }) {
+function CoverCard({ l, index = 0, reason = '' }) {
   const blurb = AGENT_BLURB[l.name] || {}
   const tagline = l.tagline || blurb.tagline || l.blurb || 'A verified, insured autonomous agent.'
   const declined = l.quote?.status !== 'bound'
@@ -485,6 +742,13 @@ function CoverCard({ l, index = 0 }) {
         <span className={`absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full font-display text-sm font-semibold ring-1 backdrop-blur-sm ${t.bg} ${t.text} ${t.ring}`}>
           {l.grade.grade}
         </span>
+
+        {/* search-match reason (only when surfaced by a query) */}
+        {reason && (
+          <span className="absolute right-4 top-14 inline-flex items-center gap-1 rounded-full bg-brand/15 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.14em] text-brand-soft ring-1 ring-brand/25 backdrop-blur-sm">
+            {reason}
+          </span>
+        )}
 
         {/* the big masthead name */}
         <div className="absolute inset-x-5 bottom-4">
