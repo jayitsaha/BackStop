@@ -1,0 +1,10 @@
+# Deps for the live-call guardian worker (scripts/call_guardian.py).
+# Heavy (silero pulls torch) — install in a separate venv, or reuse voice_ref's.
+#   python -m venv .venv-guardian && . .venv-guardian/bin/activate
+#   pip install -r scripts/call_guardian.requirements.txt
+#   python -m scripts.call_guardian dev
+livekit-agents>=1.0
+livekit-plugins-deepgram>=1.0
+livekit-plugins-openai>=1.0
+livekit-plugins-silero>=1.0
+python-dotenv>=1.0

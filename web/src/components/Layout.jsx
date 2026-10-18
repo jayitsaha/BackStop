@@ -5,8 +5,11 @@ import { useAuth } from '../lib/auth.jsx'
 const NAV = [
   { to: '/', label: 'Marketplace', end: true },
   { to: '/pricing', label: 'Pricing' },
-  { to: '/studio', label: 'Build an agent' },
+  { to: '/studio', label: 'Build' },
   { to: '/app', label: 'My account' },
+  { to: '/claims', label: 'Claims' },
+  { to: '/chain', label: 'On-chain' },
+  { to: '/calls', label: 'Calls' },
   { to: '/loop', label: 'How it works' },
 ]
 
@@ -25,17 +28,17 @@ export default function Layout({ children }) {
             </span>
             <span className="flex flex-col leading-none">
               <span className="font-display text-lg font-semibold tracking-tightish text-white">Backstop</span>
-              <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Insurance for AI agents</span>
+              <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500">A secure agentic marketplace</span>
             </span>
           </Link>
-          <nav className="hidden items-center gap-1 md:flex">
+          <nav className="hidden items-center gap-0.5 lg:flex">
             {NAV.map((n) => (
               <NavLink
                 key={n.to}
                 to={n.to}
                 end={n.end}
                 className={({ isActive }) =>
-                  `rounded-lg px-3.5 py-2 text-sm font-medium transition ${isActive ? 'bg-brand/10 text-brand-soft ring-1 ring-brand/20' : 'text-slate-400 hover:text-white'}`
+                  `whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition ${isActive ? 'bg-brand/10 text-brand-soft ring-1 ring-brand/20' : 'text-slate-400 hover:text-white'}`
                 }
               >
                 {n.label}
@@ -43,14 +46,14 @@ export default function Layout({ children }) {
             ))}
           </nav>
           {user ? (
-            <div className="flex items-center gap-3">
-              <span className="hidden text-xs text-slate-400 sm:inline">{user.email}</span>
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="hidden max-w-[160px] truncate text-xs text-slate-400 xl:inline">{user.email}</span>
               <button
                 onClick={() => {
                   logout()
                   nav('/')
                 }}
-                className="btn-ghost !px-3 !py-1.5 text-xs"
+                className="btn-ghost shrink-0 whitespace-nowrap !px-3 !py-1.5 text-xs"
               >
                 Log out
               </button>

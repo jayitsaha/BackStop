@@ -3,6 +3,7 @@ import api from '../api'
 
 const Ctx = createContext(null)
 const TOKEN = 'backstop.token'
+const REFRESH = 'backstop.refresh'
 const EMAIL = 'backstop.email'
 
 export function AuthProvider({ children }) {
@@ -32,6 +33,7 @@ export function AuthProvider({ children }) {
 
   const persist = (res) => {
     localStorage.setItem(TOKEN, res.id_token)
+    if (res.refresh_token) localStorage.setItem(REFRESH, res.refresh_token)
     localStorage.setItem(EMAIL, res.email)
     setUser({ email: res.email, uid: res.uid })
     return res
@@ -41,6 +43,7 @@ export function AuthProvider({ children }) {
   const signup = useCallback(async (email, password) => persist(await api.signup(email, password)), [])
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN)
+    localStorage.removeItem(REFRESH)
     localStorage.removeItem(EMAIL)
     setUser(null)
   }, [])

@@ -20,6 +20,7 @@ class Mandate:
     cycle_days: int = 28
     allowed_actions: list[str] = field(default_factory=list)
     forbidden_actions: list[str] = field(default_factory=list)
+    frozen_payees: list[str] = field(default_factory=list)   # payees the customer has frozen — never pay
 
     @classmethod
     def from_dict(cls, d: dict) -> "Mandate":
@@ -34,6 +35,7 @@ class Mandate:
             cycle_days=int(d.get("cycle_days", 28)),
             allowed_actions=list(d.get("allowed_actions", [])),
             forbidden_actions=list(d.get("forbidden_actions", [])),
+            frozen_payees=list(d.get("frozen_payees", [])),
         )
 
     @classmethod
@@ -47,7 +49,7 @@ class Mandate:
             "default_cap": self.default_cap, "weekly_total": self.weekly_total, "hours": list(self.hours),
             "one_payment_per_payee_per_cycle": self.one_payment_per_payee_per_cycle,
             "cycle_days": self.cycle_days, "allowed_actions": self.allowed_actions,
-            "forbidden_actions": self.forbidden_actions,
+            "forbidden_actions": self.forbidden_actions, "frozen_payees": self.frozen_payees,
         }
 
     # ---- lookups -----------------------------------------------------------
@@ -78,6 +80,8 @@ class Mandate:
                       prior_payments: list) -> tuple[bool, list[str]]:
         """Return (ok, reasons). `prior_payments` are bank Payment objects (status ok/scheduled)."""
         reasons: list[str] = []
+        if any((payee or "").lower() == f.lower() for f in self.frozen_payees):
+            reasons.append("frozen_payee")
         info = self.payee_info(payee)
         if not info:
             reasons.append("unverified_payee")

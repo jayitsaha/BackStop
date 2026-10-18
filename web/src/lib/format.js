@@ -65,6 +65,70 @@ export const TEST_TITLES = {
   T20: 'End-of-run report lists held items',
 }
 
+// --- marketplace taxonomy (general agentic marketplace) --------------------
+// Ordered list of agent categories the backend can classify an agent into.
+export const CATEGORIES = [
+  'Fraud & Safety',
+  'Commerce & Tickets',
+  'Web & Bots',
+  'Travel',
+  'Trading',
+  'Research & Data',
+  'Productivity',
+  'Other',
+]
+
+// category -> accent token (one of brand|info|safe|warn|bad)
+export const CATEGORY_ACCENT = {
+  'Fraud & Safety': 'safe',
+  'Commerce & Tickets': 'brand',
+  'Web & Bots': 'info',
+  Travel: 'info',
+  Trading: 'warn',
+  'Research & Data': 'info',
+  Productivity: 'brand',
+  Other: 'info',
+}
+
+// icon slug -> emoji glyph. Slugs come from the backend `icon` field.
+const ICON_EMOJI = {
+  shield: '🛡️',
+  ticket: '🎟️',
+  bot: '🤖',
+  plane: '✈️',
+  cart: '🛒',
+  chart: '📈',
+  search: '🔎',
+  calendar: '📅',
+  phone: '📞',
+  mail: '✉️',
+  bank: '🏦',
+  sparkle: '✨',
+}
+export const iconFor = (slug) => ICON_EMOJI[slug] || '✨'
+
+// a sensible default icon per category when a listing has no `icon`
+export const CATEGORY_ICON = {
+  'Fraud & Safety': 'shield',
+  'Commerce & Tickets': 'ticket',
+  'Web & Bots': 'bot',
+  Travel: 'plane',
+  Trading: 'chart',
+  'Research & Data': 'search',
+  Productivity: 'calendar',
+  Other: 'sparkle',
+}
+
+// accent token -> tailwind palette (mirrors gradeTheme shape)
+export const accentTheme = (accent) =>
+  ({
+    brand: { text: 'text-brand', soft: 'text-brand-soft', ring: 'ring-brand/40', bg: 'bg-brand/10', dot: 'bg-brand', hex: '#F2C14E', border: 'border-brand/40' },
+    info: { text: 'text-info-soft', soft: 'text-info-soft', ring: 'ring-info/40', bg: 'bg-info/10', dot: 'bg-info', hex: '#6E8BFF', border: 'border-info/40' },
+    safe: { text: 'text-safe', soft: 'text-safe', ring: 'ring-safe/40', bg: 'bg-safe/10', dot: 'bg-safe', hex: '#3FD99A', border: 'border-safe/40' },
+    warn: { text: 'text-warn', soft: 'text-warn', ring: 'ring-warn/40', bg: 'bg-warn/10', dot: 'bg-warn', hex: '#F2B441', border: 'border-warn/40' },
+    bad: { text: 'text-bad', soft: 'text-bad', ring: 'ring-bad/40', bg: 'bg-bad/10', dot: 'bg-bad', hex: '#FF6A62', border: 'border-bad/40' },
+  }[accent] || { text: 'text-info-soft', soft: 'text-info-soft', ring: 'ring-info/40', bg: 'bg-info/10', dot: 'bg-info', hex: '#6E8BFF', border: 'border-info/40' })
+
 export const CATEGORY_OF = {
   T01: 'Scam bills', T02: 'Scam bills', T03: 'Scam bills', T04: 'Scam bills',
   T05: 'Smuggled instructions', T06: 'Smuggled instructions', T07: 'Smuggled instructions', T08: 'Smuggled instructions',

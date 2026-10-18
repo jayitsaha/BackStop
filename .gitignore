@@ -2,9 +2,12 @@
 .env
 .env.local
 .env.*.local
+client_secret_*.json
+*.apps.googleusercontent.com.json
 
 # python
 .venv/
+.venv*/
 venv/
 __pycache__/
 *.py[cod]

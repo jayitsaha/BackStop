@@ -35,6 +35,7 @@ API_KEY = os.environ.get("FIREBASE_API_KEY", "")
 DB_URL = os.environ.get("FIREBASE_DB_URL", "").rstrip("/")
 DB_SECRET = os.environ.get("FIREBASE_DB_SECRET", "")
 IDENTITY = "https://identitytoolkit.googleapis.com/v1/accounts"
+SECURETOKEN = "https://securetoken.googleapis.com/v1/token"
 
 
 class FirebaseError(Exception):
@@ -98,6 +99,15 @@ def auth_login(email: str, password: str) -> dict:
     r = _req(f"{IDENTITY}:signInWithPassword?key={API_KEY}",
              {"email": email, "password": password, "returnSecureToken": True}, method="POST")
     return {"uid": r["localId"], "email": r["email"], "id_token": r["idToken"], "refresh_token": r.get("refreshToken")}
+
+
+def auth_refresh(refresh_token: str) -> dict:
+    """Exchange a refresh token for a fresh idToken (Firebase Secure Token API). idTokens last 1 hour;
+    this keeps a session alive without re-login."""
+    r = _req(f"{SECURETOKEN}?key={API_KEY}",
+             {"grant_type": "refresh_token", "refresh_token": refresh_token}, method="POST")
+    return {"id_token": r["id_token"], "refresh_token": r.get("refresh_token", refresh_token),
+            "uid": r.get("user_id")}
 
 
 def auth_verify(id_token: str) -> dict:

@@ -1,0 +1,60 @@
+# Backstop — reproducible local/prod stack.
+#
+#   docker compose up --build                 # api + web
+#   docker compose --profile guardian up      # also start the voice guardian
+#
+# Secrets are NEVER baked into the images: each service loads them at runtime
+# from the project-root .env via `env_file`. See .env.example for the keys.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    image: backstop-api
+    env_file:
+      - .env
+    environment:
+      # uvicorn already binds 0.0.0.0:8000 (see Dockerfile CMD).
+      PYTHONUNBUFFERED: "1"
+    ports:
+      - "8000:8000"
+    healthcheck:
+      # python:3.11-slim has no curl; probe /health with stdlib urllib.
+      test: ["CMD", "python", "-c",
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=5).status==200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+    image: backstop-web
+    ports:
+      # Host 8080 -> nginx 80. Open http://localhost:8080
+      - "8080:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Optional: live-call guardian worker (LiveKit Agents). Enable with:
+  #   docker compose --profile guardian up --build
+  guardian:
+    profiles: ["guardian"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: guardian
+    image: backstop-guardian
+    env_file:
+      - .env
+    depends_on:
+      - api
+    restart: unless-stopped

@@ -27,11 +27,13 @@ class Customer:
     bank: Bank
     mandate: Mandate
     inbox: Inbox
-    agent: Optional[str] = None                        # agent id
+    agent: Optional[str] = None                        # active agent id
     agent_name: Optional[str] = None
     certificate: Optional[dict] = None
+    agents: list = field(default_factory=list)         # owned agents [{agent_id, agent_name, certificate, added_at}]
     runs: list = field(default_factory=list)          # [{ts, agent, log, messages, report}]
     claims: list = field(default_factory=list)         # [{payment, verdict, filed_at, test_21?}]
+    frozen: list = field(default_factory=list)         # [{payee, account_last4, reason, source, at}]
     premium_collected_usd: float = 0.0
     injected: list = field(default_factory=list)       # test ids injected so far
 
@@ -42,12 +44,14 @@ class Customer:
             "agent": self.agent,
             "agent_name": self.agent_name,
             "certificate": self.certificate,
+            "agents": self.agents,
             "mandate": self.mandate.to_dict(),
             "bank": self.bank.snapshot(),
             "inbox": [m.to_dict() for m in self.inbox.messages],
             "user_requests": list(self.inbox.user_requests),
             "runs": self.runs,
             "claims": self.claims,
+            "frozen": self.frozen,
             "premium_collected_usd": round(self.premium_collected_usd, 4),
             "injected": self.injected,
         }
@@ -60,11 +64,13 @@ class Customer:
             "agent": self.agent,
             "agent_name": self.agent_name,
             "certificate": self.certificate,
+            "agents": self.agents,
             "mandate": self.mandate.to_dict(),
             "bank": self.bank.to_state(),
             "inbox": self.inbox.to_state(),
             "runs": self.runs,
             "claims": self.claims,
+            "frozen": self.frozen,
             "premium_collected_usd": round(self.premium_collected_usd, 4),
             "injected": self.injected,
         }
@@ -78,8 +84,10 @@ class Customer:
             inbox=Inbox.from_state(d.get("inbox") or {}),
             agent=d.get("agent"), agent_name=d.get("agent_name"), certificate=d.get("certificate"),
         )
+        c.agents = d.get("agents") or []
         c.runs = d.get("runs") or []
         c.claims = d.get("claims") or []
+        c.frozen = d.get("frozen") or []
         c.premium_collected_usd = float(d.get("premium_collected_usd") or 0.0)
         c.injected = d.get("injected") or []
         return c

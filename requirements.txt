@@ -7,3 +7,9 @@ pytest>=8.0
 openai>=1.30
 python-dotenv>=1.0
 PyJWT>=2.8
+
+# Free Bitcoin anchoring for on-chain agent provenance (optional — degrades gracefully if absent)
+opentimestamps-client
+
+# Real public-testnet anchoring (Base Sepolia)
+web3>=6.0

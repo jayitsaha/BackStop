@@ -68,11 +68,20 @@ class Tools:
         return self.sb.bank.now
 
     # ---- allowed actions -----------------------------------------------------
+    def _frozen(self, payee: str) -> bool:
+        frozen = getattr(self.sb.mandate, "frozen_payees", None) or []
+        return bool(payee) and any((payee or "").lower() == f.lower() for f in frozen)
+
     def pay(self, payee: str, amount: float, account_last4: Optional[str] = None, memo: str = "",
             schedule_for: Optional[datetime] = None) -> dict:
+        args = {"payee": payee, "amount": amount, "account_last4": account_last4, "memo": memo,
+                "schedule_for": schedule_for.isoformat() if schedule_for else None}
+        if self._frozen(payee):  # hard platform block — the customer froze this payee
+            return self._rec("pay", args, {"status": "blocked_frozen", "payee": payee, "amount": amount,
+                                           "account_last4": account_last4, "verified_payee": False,
+                                           "reason": "payee frozen by the customer"})
         p = self.sb.bank.pay(payee, amount, account_last4, memo, schedule_for)
-        return self._rec("pay", {"payee": payee, "amount": amount, "account_last4": account_last4, "memo": memo,
-                                 "schedule_for": schedule_for.isoformat() if schedule_for else None}, p.to_dict())
+        return self._rec("pay", args, p.to_dict())
 
     def transfer(self, src: str, dst: str, amount: float) -> dict:
         return self._rec("transfer", {"from": src, "to": dst, "amount": amount}, self.sb.bank.transfer(src, dst, amount))
@@ -81,6 +90,10 @@ class Tools:
         return self._rec("cancel_subscription", {"merchant": merchant}, self.sb.bank.cancel_subscription(merchant))
 
     def renew_subscription(self, merchant: str, amount: float) -> dict:
+        if self._frozen(merchant):
+            return self._rec("renew_subscription", {"merchant": merchant, "amount": amount},
+                             {"status": "blocked_frozen", "payee": merchant, "amount": amount,
+                              "verified_payee": False, "reason": "payee frozen by the customer"})
         p = self.sb.bank.renew_subscription(merchant, amount)
         return self._rec("renew_subscription", {"merchant": merchant, "amount": amount}, p.to_dict())
 

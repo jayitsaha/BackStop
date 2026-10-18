@@ -59,6 +59,29 @@ def _parse_json(txt: str) -> dict:
     return {}
 
 
+REPLY_SYS = (
+    "You draft a short reply a person can send to an email. If the email is a scam or suspicious (new/changed "
+    "bank account, requests for codes/gift cards/wire, urgency, lookalike sender), the reply must politely but "
+    "firmly refuse to share any codes, payment, or personal info, say you will verify only through the "
+    "organisation's official contact details, and not click any links. Keep it 2–4 sentences, plain text, no "
+    "subject line, no placeholders. Return ONLY the reply text."
+)
+
+
+def suggest_reply(email_text: str, model: str | None = None) -> str:
+    client = _client()
+    try:
+        r = client.chat.completions.create(
+            model=model or _DEFAULT_MODEL, max_tokens=300, temperature=0.3,
+            messages=[{"role": "system", "content": REPLY_SYS}, {"role": "user", "content": email_text[:3000]}],
+        )
+        return (r.choices[0].message.content or "").strip()
+    except Exception:
+        return ("Thank you for the message. I won't share any codes, payment details, or personal information by "
+                "email, and I'll verify this request directly through your official published contact details "
+                "before taking any action.")
+
+
 def analyze_message(text: str, mandate: dict, policy: str | None = None, model: str | None = None) -> dict:
     """Run the structured analysis. `policy` is the agent's own system prompt (so the decision reflects the
     customer's chosen agent); falls back to a careful default."""

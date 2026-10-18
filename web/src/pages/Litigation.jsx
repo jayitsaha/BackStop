@@ -1,0 +1,397 @@
+import { useEffect, useRef, useState } from 'react'
+import api from '../api'
+import { CheckIcon, XIcon, ShieldIcon } from '../components/marks'
+
+// Litigation / claims desk: file a claim with evidence, then an autonomous support agent
+// cross-questions you to establish the scam genuinely happened via the agent you bought — and decides.
+
+const STATUS = {
+  investigating: { label: 'Investigating', chip: 'border-info/30 bg-info/10 text-info-soft', dot: 'bg-info' },
+  decided: { label: 'Decided', chip: 'border-slate-600/40 bg-slate-700/20 text-slate-300', dot: 'bg-slate-500' },
+}
+const OUTCOME = {
+  approved: { label: 'Approved', chip: 'border-safe/30 bg-safe/10 text-safe', dot: 'bg-safe', Icon: CheckIcon },
+  denied: { label: 'Denied', chip: 'border-bad/30 bg-bad/10 text-bad', dot: 'bg-bad', Icon: XIcon },
+  needs_human: { label: 'Needs human review', chip: 'border-warn/30 bg-warn/10 text-warn', dot: 'bg-warn', Icon: ShieldIcon },
+}
+const fmt = (iso) => (iso ? new Date(iso).toLocaleString() : '')
+
+const fileToDataUri = (file) =>
+  new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(r.result)
+    r.onerror = reject
+    r.readAsDataURL(file)
+  })
+
+export default function Litigation() {
+  const [cases, setCases] = useState([])
+  const [agents, setAgents] = useState([])
+  const [sel, setSel] = useState(null) // case_id
+  const [active, setActive] = useState(null) // full case
+  const [mode, setMode] = useState('new') // 'new' | 'case'
+
+  const refresh = () =>
+    api
+      .litigationList()
+      .then((d) => setCases(Array.isArray(d) ? d : []))
+      .catch(() => {})
+
+  useEffect(() => {
+    refresh()
+    api
+      .getCustomer()
+      .then((c) => setAgents((c && c.agents) || []))
+      .catch(() => {})
+  }, [])
+
+  const openCase = (id) => {
+    setSel(id)
+    setMode('case')
+    api.litigationCase(id).then(setActive).catch(() => {})
+  }
+
+  const startNew = () => {
+    setSel(null)
+    setActive(null)
+    setMode('new')
+  }
+
+  const onOpened = (c) => {
+    setActive(c)
+    setSel(c.case_id)
+    setMode('case')
+    refresh()
+  }
+
+  const onUpdated = (c) => {
+    setActive(c)
+    refresh()
+  }
+
+  return (
+    <div className="space-y-7">
+      <header className="max-w-3xl">
+        <div className="eyebrow mb-2"><span className="h-2 w-2 rounded-full bg-brand" /> Claims · litigation</div>
+        <h1 className="font-display text-4xl font-semibold tracking-tightish text-white">File a claim</h1>
+        <p className="mt-3 text-slate-400">
+          Lost money through an agent you bought? File a claim with your evidence. Our autonomous claims
+          investigator will cross-question you to establish exactly what happened — then decide.
+        </p>
+      </header>
+
+      <div className="grid gap-6 lg:grid-cols-[1fr_1.9fr]">
+        {/* cases list */}
+        <div className="card p-4">
+          <div className="mb-3 flex items-center justify-between px-2">
+            <div className="label">Your cases</div>
+            <button onClick={startNew} className="btn-ghost !px-2.5 !py-1 text-xs">+ New claim</button>
+          </div>
+          {cases.length === 0 ? (
+            <p className="px-2 py-8 text-center text-sm text-slate-500">No claims yet. File your first on the right.</p>
+          ) : (
+            <div className="space-y-1.5">
+              {cases.map((c) => {
+                const st = STATUS[c.status] || STATUS.investigating
+                const out = c.outcome ? OUTCOME[c.outcome] : null
+                const badge = out || st
+                return (
+                  <button
+                    key={c.case_id}
+                    onClick={() => openCase(c.case_id)}
+                    className={`w-full rounded-xl border px-3 py-2.5 text-left transition ${sel === c.case_id ? 'border-brand/50 bg-brand/5' : 'border-line hover:border-brand/30'}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="flex items-center gap-1.5 truncate text-sm font-medium text-white">
+                        <span className={`h-2 w-2 shrink-0 rounded-full ${badge.dot}`} />
+                        {c.agent_name || 'Claim'}
+                      </span>
+                      <span className={`chip !px-2 !py-0.5 text-[10px] ${badge.chip}`}>{badge.label}</span>
+                    </div>
+                    <div className="mt-1 line-clamp-2 text-xs text-slate-500">{c.summary || c.suspected_scam_type}</div>
+                    <div className="mt-0.5 text-[11px] text-slate-600">{fmt(c.created_at)}</div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* right pane */}
+        <div className="card p-6">
+          {mode === 'new' || !active ? (
+            <ClaimForm agents={agents} onOpened={onOpened} />
+          ) : (
+            <CaseChat caseData={active} onUpdated={onUpdated} />
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ----------------------------- intake form -----------------------------
+function ClaimForm({ agents, onOpened }) {
+  const [agentId, setAgentId] = useState(agents[0]?.agent_id || '')
+  const [paymentId, setPaymentId] = useState('')
+  const [text, setText] = useState('')
+  const [shot, setShot] = useState(null) // { name, dataUri }
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  useEffect(() => {
+    if (!agentId && agents.length) setAgentId(agents[0].agent_id)
+  }, [agents]) // eslint-disable-line
+
+  const pickFile = async (e) => {
+    const f = e.target.files?.[0]
+    if (!f) return
+    try {
+      const dataUri = await fileToDataUri(f)
+      setShot({ name: f.name, dataUri })
+    } catch {
+      setErr('Could not read that file.')
+    }
+  }
+
+  const submit = async () => {
+    setErr('')
+    if (!text.trim() && !shot) {
+      setErr('Describe what happened or attach a screenshot.')
+      return
+    }
+    setBusy(true)
+    try {
+      const c = await api.litigationOpen({
+        agent_id: agentId || undefined,
+        payment_id: paymentId.trim() || undefined,
+        evidence_text: text.trim(),
+        screenshot: shot?.dataUri,
+      })
+      onOpened(c)
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'Could not open the claim.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex items-center gap-2">
+        <h3 className="font-display text-xl text-white">New claim</h3>
+        <span className="chip border-info/30 bg-info/10 text-info-soft"><ShieldIcon className="h-3.5 w-3.5" /> Evidence-backed</span>
+      </div>
+      <p className="mt-1 text-sm text-slate-400">Tell us what happened. The investigator opens with its first question right after you submit.</p>
+
+      {agents.length === 0 && (
+        <div className="mt-4 rounded-xl border border-warn/40 bg-warn/10 p-3 text-sm text-warn">
+          You don't own any agents yet. Add one from the marketplace before filing a claim about it.
+        </div>
+      )}
+
+      <div className="mt-5 space-y-4">
+        <div>
+          <label className="label mb-1.5 block">Which agent is this claim about?</label>
+          <select
+            className="inp w-full"
+            value={agentId}
+            onChange={(e) => setAgentId(e.target.value)}
+            disabled={agents.length === 0}
+          >
+            {agents.length === 0 && <option value="">No agents owned</option>}
+            {agents.map((a) => (
+              <option key={a.agent_id} value={a.agent_id}>
+                {a.agent_name}{a.use_case_type ? ` · ${a.use_case_type}` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="label mb-1.5 block">Linked payment ID <span className="text-slate-600">(optional)</span></label>
+          <input className="inp w-full" placeholder="e.g. pay-1234" value={paymentId} onChange={(e) => setPaymentId(e.target.value)} />
+        </div>
+
+        <div>
+          <label className="label mb-1.5 block">What happened?</label>
+          <textarea
+            className="inp min-h-[120px] w-full resize-y"
+            placeholder="Describe the scam: who you paid, how much, what the agent did, and how you realised something was wrong…"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label className="label mb-1.5 block">Screenshot evidence <span className="text-slate-600">(optional)</span></label>
+          <div className="flex items-center gap-3">
+            <label className="btn-ghost cursor-pointer text-sm">
+              {shot ? 'Replace image' : 'Upload image'}
+              <input type="file" accept="image/*" className="hidden" onChange={pickFile} />
+            </label>
+            {shot && (
+              <span className="flex items-center gap-2 text-xs text-slate-400">
+                <CheckIcon className="h-4 w-4 text-safe" /> {shot.name}
+                <button onClick={() => setShot(null)} className="text-slate-600 hover:text-bad">remove</button>
+              </span>
+            )}
+          </div>
+          {shot && <img src={shot.dataUri} alt="evidence" className="mt-3 max-h-48 rounded-xl border border-line object-contain" />}
+        </div>
+
+        {err && <div className="rounded-lg border border-bad/40 bg-bad/10 px-3 py-2 text-sm text-bad">{err}</div>}
+
+        <button onClick={submit} disabled={busy || agents.length === 0} className="btn-primary w-full disabled:opacity-50">
+          {busy ? 'Opening case…' : 'File claim & start investigation'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ----------------------------- case chat -----------------------------
+function CaseChat({ caseData, onUpdated }) {
+  const [answer, setAnswer] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const endRef = useRef(null)
+  const transcript = caseData.transcript || []
+  const decided = caseData.status === 'decided'
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [transcript.length])
+
+  const send = async () => {
+    const a = answer.trim()
+    if (!a || busy) return
+    setErr('')
+    setBusy(true)
+    setAnswer('')
+    try {
+      const updated = await api.litigationChat(caseData.case_id, { answer: a })
+      onUpdated(updated)
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'Could not send your answer.')
+      setAnswer(a)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onKey = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      send()
+    }
+  }
+
+  const st = STATUS[caseData.status] || STATUS.investigating
+  const dec = caseData.decision
+
+  return (
+    <div className="flex h-full flex-col">
+      {/* header */}
+      <div className="flex items-start justify-between gap-3 border-b border-line pb-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h3 className="font-display text-xl text-white">{caseData.agent_name || 'Claim'}</h3>
+            <span className={`chip ${st.chip}`}><span className={`h-2 w-2 rounded-full ${st.dot}`} /> {st.label}</span>
+          </div>
+          <p className="mt-1 max-w-xl text-sm text-slate-400">{caseData.summary}</p>
+          <div className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-slate-600">
+            <span className="font-mono">{caseData.case_id}</span>
+            {caseData.suspected_scam_type && <span>· suspected: {caseData.suspected_scam_type}</span>}
+            {caseData.payment_id && <span>· payment {caseData.payment_id}</span>}
+          </div>
+        </div>
+      </div>
+
+      {/* transcript */}
+      <div className="mt-4 max-h-[48vh] min-h-[220px] flex-1 space-y-3 overflow-y-auto pr-1">
+        {caseData.screenshot_text && (
+          <details className="rounded-xl border border-line bg-ink-950/60 p-3 text-xs text-slate-400">
+            <summary className="cursor-pointer text-slate-300">Transcribed screenshot evidence</summary>
+            <pre className="mt-2 whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-slate-500">{caseData.screenshot_text}</pre>
+          </details>
+        )}
+        {transcript.map((t, i) => {
+          const isAgent = t.role === 'agent'
+          return (
+            <div key={i} className={`flex ${isAgent ? 'justify-start' : 'justify-end'}`}>
+              <div
+                className={`max-w-[80%] whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+                  isAgent
+                    ? 'border border-line bg-ink-950/60 text-slate-200'
+                    : 'bg-brand/15 text-brand-soft'
+                }`}
+              >
+                {isAgent && <div className="mb-1 flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-slate-500"><ShieldIcon className="h-3 w-3" /> Investigator</div>}
+                {t.content}
+              </div>
+            </div>
+          )
+        })}
+        {busy && (
+          <div className="flex justify-start">
+            <div className="rounded-2xl border border-line bg-ink-950/60 px-3.5 py-2.5 text-sm text-slate-500">Investigator is thinking…</div>
+          </div>
+        )}
+        <div ref={endRef} />
+      </div>
+
+      {/* verdict */}
+      {decided && dec && <VerdictCard dec={dec} adjudication={caseData.adjudication} />}
+
+      {/* composer */}
+      {!decided && (
+        <div className="mt-4 border-t border-line pt-4">
+          {err && <div className="mb-2 rounded-lg border border-bad/40 bg-bad/10 px-3 py-2 text-sm text-bad">{err}</div>}
+          <div className="flex items-end gap-2">
+            <textarea
+              className="inp max-h-32 min-h-[46px] flex-1 resize-y"
+              placeholder="Answer the investigator… (Enter to send, Shift+Enter for a new line)"
+              value={answer}
+              onChange={(e) => setAnswer(e.target.value)}
+              onKeyDown={onKey}
+            />
+            <button onClick={send} disabled={busy || !answer.trim()} className="btn-primary disabled:opacity-50">Send</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function VerdictCard({ dec, adjudication }) {
+  const o = OUTCOME[dec.outcome] || OUTCOME.needs_human
+  const { Icon } = o
+  return (
+    <div className={`mt-4 rounded-2xl border p-4 ${o.chip}`}>
+      <div className="flex items-center gap-2">
+        <Icon className="h-5 w-5" />
+        <h4 className="font-display text-lg">Verdict · {o.label}</h4>
+        {dec.amount_usd > 0 && <span className="ml-auto font-mono text-sm">${Number(dec.amount_usd).toLocaleString()}</span>}
+      </div>
+      {dec.rationale && <p className="mt-2 text-sm text-slate-200">{dec.rationale}</p>}
+      {Array.isArray(dec.evidence_cited) && dec.evidence_cited.length > 0 && (
+        <div className="mt-3">
+          <div className="label mb-1.5">Evidence cited</div>
+          <ul className="space-y-1">
+            {dec.evidence_cited.map((e, i) => (
+              <li key={i} className="flex items-start gap-1.5 text-xs text-slate-300">
+                <CheckIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-safe" /> {e}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {adjudication && (
+        <div className="mt-3 rounded-lg border border-safe/30 bg-safe/5 px-3 py-2 text-xs text-safe">
+          Logged against payment {adjudication.payment_id} — eligible for settlement.
+        </div>
+      )}
+    </div>
+  )
+}

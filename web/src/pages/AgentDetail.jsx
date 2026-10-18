@@ -21,7 +21,10 @@ export default function AgentDetail() {
   const q = data.quote
   const declined = q.status === 'declined'
   const t = gradeTheme(g.grade)
-  const blurb = AGENT_BLURB[name] || { tagline: data.blurb || data.system_prompt?.slice(0, 160), developer: data.developer }
+  const blurb = {
+    tagline: data.tagline || AGENT_BLURB[name]?.tagline || data.blurb || data.system_prompt?.slice(0, 160),
+    developer: AGENT_BLURB[name]?.developer || data.developer,
+  }
   const isLive = data.kind === 'llm'
 
   return (
@@ -51,6 +54,8 @@ export default function AgentDetail() {
               ) : (
                 <span className="chip">deterministic reference engine</span>
               )}
+              {data.use_case_type && <span className="chip">{data.use_case_type}</span>}
+              {data.category && <span className="chip">{data.category}</span>}
             </div>
             {data.identity?.agent_id && (
               <div className="mt-2 font-mono text-xs text-slate-600">
@@ -70,6 +75,7 @@ export default function AgentDetail() {
 
       <div className="grid gap-8 lg:grid-cols-[1.55fr_1fr]">
         <div className="space-y-8">
+          <AboutAgent data={data} name={name} />
           <CrashTestLab agentId={id} name={name} isLive={isLive} perTest={perTest} live={live} onLive={(tid, passed) => setLive((m) => ({ ...m, [tid]: passed }))} />
           <RedTeam id={id} name={name} />
           <ReplayGrid perTest={perTest} live={live} />
@@ -80,6 +86,98 @@ export default function AgentDetail() {
           <Coverage />
         </div>
       </div>
+    </div>
+  )
+}
+
+// Rich marketplace info — what this agent IS, what it OFFERS, and HOW to use it.
+function AboutAgent({ data, name }) {
+  const caps = data.capabilities || []
+  const usage = data.usage || []
+  const inputs = data.inputs || []
+  const outputs = data.outputs || []
+  const examples = data.example_tasks || []
+  const hasAnything = data.description || caps.length || usage.length || inputs.length || outputs.length
+  if (!hasAnything) return null
+  return (
+    <div className="card p-6 md:p-7">
+      <div className="eyebrow mb-1"><span className="h-2 w-2 rounded-full bg-brand" /> About this agent</div>
+      <h3 className="font-display text-2xl text-white">What {name} does</h3>
+      {data.description && (
+        <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-300">{data.description}</p>
+      )}
+
+      {caps.length > 0 && (
+        <div className="mt-6">
+          <div className="label mb-3">What it offers</div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {caps.map((c, i) => {
+              const nm = typeof c === 'string' ? c : c.name
+              const desc = typeof c === 'string' ? '' : c.description
+              return (
+                <div key={i} className="rounded-xl border border-line bg-ink-950/50 p-3">
+                  <div className="flex items-start gap-2">
+                    <CheckIcon className="mt-0.5 h-4 w-4 flex-none text-safe" />
+                    <div>
+                      <div className="text-sm font-medium text-white">{nm}</div>
+                      {desc && <div className="mt-0.5 text-xs text-slate-400">{desc}</div>}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {usage.length > 0 && (
+        <div className="mt-6">
+          <div className="label mb-3">How to use it</div>
+          <ol className="space-y-2">
+            {usage.map((step, i) => (
+              <li key={i} className="flex items-start gap-3 text-sm text-slate-300">
+                <span className="grid h-5 w-5 flex-none place-items-center rounded-full bg-brand/15 font-mono text-[11px] text-brand-soft">{i + 1}</span>
+                {typeof step === 'string' ? step : step.text || step.title}
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+
+      {(inputs.length > 0 || outputs.length > 0) && (
+        <div className="mt-6 grid gap-5 sm:grid-cols-2">
+          {inputs.length > 0 && (
+            <div>
+              <div className="label mb-2">Inputs</div>
+              <div className="flex flex-wrap gap-1.5">
+                {inputs.map((x, i) => <span key={i} className="chip">{typeof x === 'string' ? x : x.name}</span>)}
+              </div>
+            </div>
+          )}
+          {outputs.length > 0 && (
+            <div>
+              <div className="label mb-2">Outputs</div>
+              <div className="flex flex-wrap gap-1.5">
+                {outputs.map((x, i) => <span key={i} className="chip">{typeof x === 'string' ? x : x.name}</span>)}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {examples.length > 0 && (
+        <div className="mt-6">
+          <div className="label mb-2">Example tasks</div>
+          <ul className="space-y-1.5">
+            {examples.map((x, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
+                <ArrowIcon className="mt-0.5 h-4 w-4 flex-none text-slate-500" />
+                <span className="italic">“{typeof x === 'string' ? x : x.text}”</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   )
 }
